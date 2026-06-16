@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          curl -I "https://streamlit.app"
+          curl -I "https://atomapp-mszkbilamwthrtksvhvm8a.streamlit.app/"
