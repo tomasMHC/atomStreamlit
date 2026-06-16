@@ -4,244 +4,114 @@ import base64
 from io import BytesIO
 import requests
 import unicodedata
-from pathlib import Path
 
-st.set_page_config(page_title="PharmaGroup catalogue", layout="wide")
 
+st.set_page_config(page_title="Excel Cart", layout="wide")
 
 # =========================================================
 # Session state initialization
 # =========================================================
-DEFAULT_STATE = {
-    "setup_done": False,
-    "autoload_enabled": True,
-    "file_bytes": None,
-    "data": None,
-    "cart": [],
-    "selected_sheets": [],
-    "item_col": None,
-    "category_col": None,
-    "price_col": None,
-}
+if "setup_done" not in st.session_state:
+    st.session_state.setup_done = False
 
-for k, v in DEFAULT_STATE.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
+if "file_bytes" not in st.session_state:
+    st.session_state.file_bytes = None
 
-# =========================================================
-# CSS
-# =========================================================
+if "data" not in st.session_state:
+    st.session_state.data = None
+
+if "cart" not in st.session_state:
+    st.session_state.cart = []
+
+if "selected_sheets" not in st.session_state:
+    st.session_state.selected_sheets = []
+
+if "item_col" not in st.session_state:
+    st.session_state.item_col = None
+
+if "category_col" not in st.session_state:
+    st.session_state.category_col = None
+
+if "price_col" not in st.session_state:
+    st.session_state.price_col = None
+
 st.markdown("""
 <style>
-/* --- General spacing --- */
-.block-container {
-    padding-top: 0.8rem;
-    padding-bottom: 1rem;
-    max-width: 1200px;
-}
-
-/* --- Try to reduce Streamlit chrome --- */
+/* Hide top header area */
 header[data-testid="stHeader"] {
     display: none;
 }
+
+/* Hide Streamlit toolbar / top-right app controls if present */
 [data-testid="stToolbar"] {
     display: none !important;
 }
+
+/* Hide app deploy button if present */
 .stAppDeployButton {
     display: none !important;
 }
+
+/* Hide main hamburger menu */
 #MainMenu {
     visibility: hidden;
 }
+
+/* Hide footer */
 footer {
     visibility: hidden;
 }
+
+/* Sometimes the bottom-right decoration / status area is rendered in a floating container */
 [data-testid="stStatusWidget"] {
     display: none !important;
 }
+
+/* Hide element container anchors / decoration if any */
 [data-testid="stDecoration"] {
     display: none !important;
-}
-
-/* --- Compact widgets --- */
-div.stButton > button {
-    min-height: 2.2rem;
-    padding-top: 0.2rem;
-    padding-bottom: 0.2rem;
-    border-radius: 0.6rem;
-}
-div[data-baseweb="input"] input {
-    padding-top: 0.3rem !important;
-    padding-bottom: 0.3rem !important;
-}
-
-/* --- Card text spacing --- */
-.pg-card-title {
-    font-weight: 600;
-    font-size: 1.05rem;
-    margin-bottom: 0.2rem;
-}
-.pg-muted {
-    color: #6b7280;
-    font-size: 0.9rem;
-    line-height: 1.2;
-}
-.pg-header-wrap {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 0.5rem;
-}
-.pg-header-title {
-    margin: 0;
-    line-height: 1.1;
-}
-.pg-header-subtitle {
-    margin: 0;
-    color: #6b7280;
 }
 </style>
 """, unsafe_allow_html=True)
 
+if "autoload_enabled" not in st.session_state:
+    st.session_state.autoload_enabled = True
+
+
+
+
 # =========================================================
 # Helpers
 # =========================================================
-def normalize_text(text: str) -> str:
-    """
-    Lowercase, trim, and remove accents/diacritics.
-    Example: Kategória -> kategoria
-    """
-    text = str(text).strip().lower()
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    return text
 
-
-def guess_column(columns, candidates):
-    """
-    Try to match a column name using normalized comparison.
-    """
-    normalized_cols = {normalize_text(c): c for c in columns}
-    for cand in candidates:
-        cand_norm = normalize_text(cand)
-        if cand_norm in normalized_cols:
-            return normalized_cols[cand_norm]
-    return None
-
-
-def load_logo_base64(path: str):
-    """
-    Return base64-encoded image if it exists, otherwise None.
-    """
-    p = Path(path)
-    if not p.exists():
-        return None
-    with open(p, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
-
-def get_excel_url_from_secrets():
-    """
-    Supports both:
-      st.secrets["excel_url"]
-    and:
-      st.secrets["sharepoint"]["excel_url"]
-    """
-    if "excel_url" in st.secrets:
-        return st.secrets["excel_url"]
-
-    if "sharepoint" in st.secrets and "excel_url" in st.secrets["sharepoint"]:
-        return st.secrets["sharepoint"]["excel_url"]
-
-    raise KeyError("Could not find Excel URL in Streamlit secrets.")
-
+def to_excel_bytes(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Cart")
+    output.seek(0)
+    return output.getvalue()
 
 @st.cache_data(show_spinner=False)
 def download_excel_from_private_url():
     """
     Download Excel bytes from a private URL stored in Streamlit secrets.
+    Supports optional Authorization header.
     """
-    excel_url = get_excel_url_from_secrets()
+    excel_url = st.secrets["excel_url"]
 
     headers = {}
     if "excel_auth_header" in st.secrets and st.secrets["excel_auth_header"]:
         headers["Authorization"] = st.secrets["excel_auth_header"]
-    elif "sharepoint" in st.secrets and "excel_auth_header" in st.secrets["sharepoint"]:
-        auth_header = st.secrets["sharepoint"]["excel_auth_header"]
-        if auth_header:
-            headers["Authorization"] = auth_header
 
     response = requests.get(excel_url, headers=headers, timeout=60)
     response.raise_for_status()
 
-    content_type = response.headers.get("content-type", "")
-    if "html" in content_type.lower():
-        raise ValueError(
-            f"URL returned HTML instead of Excel (content-type: {content_type}). "
-            f"Your SharePoint link probably requires login or is a preview page, not a direct file link."
-        )
-
     return response.content
-
-
-def get_excel_sheets(file_bytes):
-    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
-    return xl.sheet_names
-
-
-def load_selected_sheets(file_bytes, selected_sheets):
-    sheets_dict = pd.read_excel(
-        BytesIO(file_bytes),
-        sheet_name=selected_sheets,
-        engine="openpyxl"
-    )
-
-    frames = []
-    for sheet_name, df in sheets_dict.items():
-        if df is None or df.empty:
-            continue
-        temp = df.copy()
-        temp["__sheet__"] = sheet_name
-        frames.append(temp)
-
-    if not frames:
-        return pd.DataFrame()
-
-    return pd.concat(frames, ignore_index=True)
-
-
-def build_standard_table(df, item_col, category_col, price_col):
-    """
-    Normalize selected columns into:
-      item, category, price, eqp_type
-    where eqp_type comes from sheet name.
-    """
-    out = df.rename(columns={
-        item_col: "item",
-        category_col: "category",
-        price_col: "price"
-    }).copy()
-
-    required_cols = ["item", "category", "price", "__sheet__"]
-    out = out[required_cols].copy()
-
-    out["item"] = out["item"].astype(str).str.strip()
-    out["category"] = out["category"].astype(str).str.strip()
-    out["price"] = pd.to_numeric(out["price"], errors="coerce")
-
-    out = out.dropna(subset=["item", "category", "price"])
-    out = out[out["item"] != ""]
-    out = out[out["category"] != ""]
-
-    out = out.rename(columns={"__sheet__": "eqp_type"})
-    out = out.reset_index(drop=True)
-
-    return out
-
 
 def try_autoload_default_excel():
     """
-    Auto-load the private Excel file from SharePoint and build normalized data.
+    Try to auto-load the private Excel file from secrets and build app data.
+    If successful, store normalized data directly into session state.
     """
     file_bytes = download_excel_from_private_url()
     sheet_names = get_excel_sheets(file_bytes)
@@ -254,24 +124,15 @@ def try_autoload_default_excel():
 
     item_guess = guess_column(
         available_cols,
-        [
-            "polozky", "položky",
-            "item", "name", "product", "part", "part name", "material", "description"
-        ]
+        ["polozky","item", "name", "product", "part", "part name", "material", "description"]
     )
     category_guess = guess_column(
         available_cols,
-        [
-            "kategoria", "kategória",
-            "category", "group", "type", "family", "class"
-        ]
+        ["kategoria","category", "group", "type", "family", "class"]
     )
     price_guess = guess_column(
         available_cols,
-        [
-            "cena",
-            "price", "cost", "unit price", "amount", "value"
-        ]
+        ["cena","price", "cost", "unit price", "amount", "value"]
     )
 
     if not item_guess or not category_guess or not price_guess:
@@ -291,8 +152,103 @@ def try_autoload_default_excel():
     st.session_state.price_col = price_guess
     st.session_state.setup_done = True
 
+def get_excel_sheets(file_bytes):
+    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
+    return xl.sheet_names
+
+
+def load_logo(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+def normalize_text(text):
+    """
+    Lowercase, strip spaces, and remove accents/diacritics.
+    """
+    text = str(text).strip().lower()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return text
+
+def guess_column(columns, candidates):
+    """
+    Try to guess a matching column from provided candidates.
+    Handles accents like: Kategória -> kategoria
+    """
+    normalized = {normalize_text(c): c for c in columns}
+    for cand in candidates:
+        cand_norm = normalize_text(cand)
+        if cand_norm in normalized:
+            return normalized[cand_norm]
+    return None
+
+
+def get_excel_sheets(file_bytes):
+    """
+    Return sheet names from uploaded Excel bytes.
+    """
+    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
+    return xl.sheet_names
+
+
+def load_selected_sheets(file_bytes, selected_sheets):
+    """
+    Load selected sheets and append a source sheet column.
+    """
+    sheets_dict = pd.read_excel(
+        BytesIO(file_bytes),
+        sheet_name=selected_sheets,
+        engine="openpyxl"
+    )
+
+    frames = []
+    for sheet_name, df in sheets_dict.items():
+        if df is None or df.empty:
+            continue
+
+        temp = df.copy()
+        temp["__sheet__"] = sheet_name
+        frames.append(temp)
+
+    if not frames:
+        return pd.DataFrame()
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_standard_table(df, item_col, category_col, price_col):
+    """
+    Normalize user-selected columns into:
+    item, category, price, eqp_type
+    """
+    out = df.rename(columns={
+        item_col: "item",
+        category_col: "category",
+        price_col: "price"
+    }).copy()
+
+    required_cols = ["item", "category", "price", "__sheet__"]
+    out = out[required_cols].copy()
+
+    out["item"] = out["item"].astype(str).str.strip()
+    out["category"] = out["category"].astype(str).str.strip()
+    out["price"] = pd.to_numeric(out["price"], errors="coerce")
+
+    out = out.dropna(subset=["item", "category", "price"])
+    out = out[out["item"] != ""]
+    out = out[out["category"] != ""]
+
+    # sheet name = equipment type
+    out = out.rename(columns={"__sheet__": "eqp_type"})
+    out = out.reset_index(drop=True)
+
+    return out
+
 
 def add_to_cart(item_row, qty):
+    """
+    Add item to cart. If item already exists, increase quantity.
+    """
     item_name = item_row["item"]
     category = item_row["category"]
     price = float(item_row["price"])
@@ -300,10 +256,10 @@ def add_to_cart(item_row, qty):
 
     for cart_item in st.session_state.cart:
         if (
-            cart_item["item"] == item_name
-            and cart_item["category"] == category
-            and cart_item["price"] == price
-            and cart_item["eqp_type"] == eqp_type
+            cart_item["item"] == item_name and
+            cart_item["category"] == category and
+            cart_item["price"] == price and
+            cart_item["eqp_type"] == eqp_type
         ):
             cart_item["qty"] += qty
             return
@@ -317,7 +273,11 @@ def add_to_cart(item_row, qty):
     })
 
 
+
 def get_cart_df():
+    """
+    Convert cart from session state to DataFrame.
+    """
     if not st.session_state.cart:
         return pd.DataFrame(columns=[
             "item", "category", "eqp_type", "price", "qty", "line_total"
@@ -325,27 +285,14 @@ def get_cart_df():
 
     df = pd.DataFrame(st.session_state.cart)
     df["line_total"] = df["price"] * df["qty"]
+
     return df[["item", "category", "eqp_type", "price", "qty", "line_total"]]
 
 
-def to_excel_bytes(df):
-    export_df = df.rename(columns={
-        "item": "Item",
-        "category": "Category",
-        "eqp_type": "Equipment category",
-        "price": "Unit price",
-        "qty": "Quantity",
-        "line_total": "Line total"
-    })
-
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        export_df.to_excel(writer, index=False, sheet_name="Cart")
-    output.seek(0)
-    return output.getvalue()
-
-
-def reset_setup(keep_cart=False, autoload_enabled=None):
+def reset_setup(keep_cart=False):
+    """
+    Reset uploaded file / mapping setup.
+    """
     st.session_state.setup_done = False
     st.session_state.file_bytes = None
     st.session_state.data = None
@@ -354,185 +301,37 @@ def reset_setup(keep_cart=False, autoload_enabled=None):
     st.session_state.category_col = None
     st.session_state.price_col = None
 
-    if autoload_enabled is not None:
-        st.session_state.autoload_enabled = autoload_enabled
-
     if not keep_cart:
         st.session_state.cart = []
-
-
-def render_header():
-    logo_base64 = load_logo_base64("main_logo.png")
-
-    if logo_base64:
-        st.markdown(
-            f"""
-            <div class="pg-header-wrap">
-                <img src="data:image/png;base64,{logo_base64}" width="88">
-                <div>
-                    <h1 class="pg-header-title">PharmaGroup catalogue</h1>
-                    <p class="pg-header-subtitle">
-                        Load your default Excel from SharePoint or upload a file manually.
-                    </p>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.title("PharmaGroup catalogue")
-        st.caption("Load your default Excel from SharePoint or upload a file manually.")
-
-
-def render_available_items_desktop(filtered_df):
-    st.markdown("## Available items")
-
-    if filtered_df.empty:
-        st.warning("No items match the current filters.")
-        return
-
-    h1, h2, h3, h4, h5, h6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
-    h1.markdown("**Item**")
-    h2.markdown("**Equipment category**")
-    h3.markdown("**Category**")
-    h4.markdown("**Unit price**")
-    h5.markdown("**Quantity**")
-    h6.markdown("**Action**")
-
-    st.divider()
-
-    for idx, row in filtered_df.iterrows():
-        c1, c2, c3, c4, c5, c6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
-
-        with c1:
-            st.markdown(f"**{row['item']}**")
-
-        with c2:
-            st.write(row["eqp_type"])
-
-        with c3:
-            st.write(row["category"])
-
-        with c4:
-            st.write(f"{row['price']:.2f}")
-
-        with c5:
-            qty = st.number_input(
-                "Quantity",
-                min_value=1,
-                max_value=1000,
-                value=1,
-                step=1,
-                key=f"qty_desktop_{idx}",
-                label_visibility="collapsed"
-            )
-
-        with c6:
-            if st.button("Add", key=f"add_desktop_{idx}", use_container_width=True):
-                add_to_cart(row, qty)
-                st.rerun()
-
-
-def render_available_items_mobile(filtered_df):
-    st.markdown("## Available items")
-
-    if filtered_df.empty:
-        st.warning("No items match the current filters.")
-        return
-
-    for idx, row in filtered_df.iterrows():
-        with st.container(border=True):
-            st.markdown(f"<div class='pg-card-title'>{row['item']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Equipment category: {row['eqp_type']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Category: {row['category']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Unit price: {row['price']:.2f}</div>", unsafe_allow_html=True)
-
-            q_col, a_col = st.columns([1, 1])
-
-            with q_col:
-                qty = st.number_input(
-                    f"Quantity {idx}",
-                    min_value=1,
-                    max_value=1000,
-                    value=1,
-                    step=1,
-                    key=f"qty_mobile_{idx}"
-                )
-
-            with a_col:
-                st.write("")
-                if st.button("Add to cart", key=f"add_mobile_{idx}", use_container_width=True):
-                    add_to_cart(row, qty)
-                    st.rerun()
-
-
-def render_cart_desktop(cdf):
-    st.markdown("## Cart")
-
-    if cdf.empty:
-        st.info("Cart is empty.")
-        return
-
-    h1, h2, h3, h4, h5 = st.columns([3, 2, 2, 2, 1.2])
-    h1.markdown("**Item**")
-    h2.markdown("**Equipment category**")
-    h3.markdown("**Unit price**")
-    h4.markdown("**Quantity**")
-    h5.markdown("**Action**")
-
-    st.divider()
-
-    for i, row in cdf.iterrows():
-        a, b, c, d, e = st.columns([3, 1.8, 1.2, 1, 1.2])
-
-        with a:
-            st.markdown(f"**{row['item']}**")
-            st.caption(row["category"])
-
-        with b:
-            st.write(row["eqp_type"])
-
-        with c:
-            st.write(f"{row['price']:.2f}")
-
-        with d:
-            st.write(f"{int(row['qty'])}")
-
-        with e:
-            if st.button("Remove", key=f"remove_desktop_{i}", use_container_width=True):
-                st.session_state.cart.pop(i)
-                st.rerun()
-
-
-def render_cart_mobile(cdf):
-    st.markdown("## Cart")
-
-    if cdf.empty:
-        st.info("Cart is empty.")
-        return
-
-    for i, row in cdf.iterrows():
-        with st.container(border=True):
-            st.markdown(f"<div class='pg-card-title'>{row['item']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Category: {row['category']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Equipment category: {row['eqp_type']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Unit price: {row['price']:.2f}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Quantity: {int(row['qty'])}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='pg-muted'>Line total: {row['line_total']:.2f}</div>", unsafe_allow_html=True)
-
-            if st.button("Remove", key=f"remove_mobile_{i}", use_container_width=True):
-                st.session_state.cart.pop(i)
-                st.rerun()
 
 
 # =========================================================
 # Title
 # =========================================================
-render_header()
+
+logo_base64 = load_logo("main_logo.png")
+
+st.markdown(
+    f"""
+    <div style="display:flex;align-items:center;gap:15px;">
+        <img src="data:image/png;base64,{logo_base64}" width="100">
+        <div>
+            <h1 style="margin-bottom:0;">PharmaGroup catalogue</h1>
+            <p style="margin-top:0;color:gray;">
+                Upload an Excel file, map columns once, then use compact filters and a cart.
+            </p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
 
 # =========================================================
-# Auto-load SharePoint file on first load (unless manual mode requested)
+# Setup section (visible only before confirm)
 # =========================================================
+
 if not st.session_state.setup_done and st.session_state.autoload_enabled:
     try:
         try_autoload_default_excel()
@@ -540,20 +339,8 @@ if not st.session_state.setup_done and st.session_state.autoload_enabled:
     except Exception as e:
         st.warning(f"Automatic private Excel load failed: {e}")
 
-# =========================================================
-# Setup section
-# =========================================================
 if not st.session_state.setup_done:
-    top_a, top_b = st.columns([3, 2])
-
-    with top_a:
-        st.subheader("Setup")
-
-    with top_b:
-        if st.button("Load default SharePoint file", use_container_width=True):
-            st.session_state.autoload_enabled = True
-            st.session_state.setup_done = False
-            st.rerun()
+    st.subheader("Setup")
 
     uploaded_file = st.file_uploader(
         "Upload Excel file",
@@ -562,7 +349,7 @@ if not st.session_state.setup_done:
     )
 
     if uploaded_file is None:
-        st.info("Upload an Excel file to continue, or use the default SharePoint file.")
+        st.info("Upload an Excel file to start.")
         st.stop()
 
     file_bytes = uploaded_file.getvalue()
@@ -603,24 +390,15 @@ if not st.session_state.setup_done:
 
     item_guess = guess_column(
         available_cols,
-        [
-            "polozky", "položky",
-            "item", "name", "product", "part", "part name", "material", "description"
-        ]
+        ["item", "name", "product", "part", "part name", "material", "description"]
     )
     category_guess = guess_column(
         available_cols,
-        [
-            "kategoria", "kategória",
-            "category", "group", "type", "family", "class"
-        ]
+        ["category", "group", "type", "family", "class"]
     )
     price_guess = guess_column(
         available_cols,
-        [
-            "cena",
-            "price", "cost", "unit price", "amount", "value"
-        ]
+        ["price", "cost", "unit price", "amount", "value"]
     )
 
     c1, c2, c3 = st.columns(3)
@@ -629,21 +407,24 @@ if not st.session_state.setup_done:
         item_col = st.selectbox(
             "Item column",
             options=available_cols,
-            index=available_cols.index(item_guess) if item_guess in available_cols else 0
+            index=available_cols.index(item_guess) if item_guess in available_cols else 0,
+            help="Column containing item / product / part name."
         )
 
     with c2:
         category_col = st.selectbox(
             "Category column",
             options=available_cols,
-            index=available_cols.index(category_guess) if category_guess in available_cols else 0
+            index=available_cols.index(category_guess) if category_guess in available_cols else 0,
+            help="Column containing category / group / family."
         )
 
     with c3:
         price_col = st.selectbox(
             "Price column",
             options=available_cols,
-            index=available_cols.index(price_guess) if price_guess in available_cols else 0
+            index=available_cols.index(price_guess) if price_guess in available_cols else 0,
+            help="Column containing numeric item price."
         )
 
     with st.expander("Preview raw uploaded data"):
@@ -667,7 +448,6 @@ if not st.session_state.setup_done:
         st.session_state.category_col = category_col
         st.session_state.price_col = price_col
         st.session_state.setup_done = True
-        st.session_state.autoload_enabled = False
 
         st.rerun()
 
@@ -680,37 +460,33 @@ data = st.session_state.data
 
 if data is None or data.empty:
     st.error("No data available. Please reset and load the file again.")
-    if st.button("Reset", use_container_width=True):
-        reset_setup(keep_cart=False, autoload_enabled=True)
+    if st.button("Reset"):
+        reset_setup(keep_cart=False)
         st.rerun()
     st.stop()
 
-# Top controls
-top_left, top_mid, top_right = st.columns([3, 3, 2])
+# Top compact controls
+top_left, top_mid, top_right = st.columns([3, 2, 1])
 
 with top_left:
     st.success("Excel loaded")
 
 with top_mid:
-    st.caption(f"Sheets: {', '.join(st.session_state.selected_sheets)}")
+    file_info = f"Sheets: {', '.join(st.session_state.selected_sheets)}"
+    st.caption(file_info)
 
 with top_right:
-    if st.button("Change file / remap", use_container_width=True):
-        reset_setup(keep_cart=False, autoload_enabled=False)
+    if st.button("Change file / remap"):
+        reset_setup(keep_cart=False)
+        st.session_state.autoload_enabled = False
         st.rerun()
 
-# Toggle
-view_col1, view_col2 = st.columns([2, 2])
-with view_col1:
-    mobile_view = st.toggle("Mobile-friendly layout", value=True)
-with view_col2:
-    if st.button("Reload default SharePoint file", use_container_width=True):
-        reset_setup(keep_cart=False, autoload_enabled=True)
-        st.rerun()
 
-# Filters
+# =========================================================
+# Compact dropdown filters
+# =========================================================
 filter1, filter2, filter3 = st.columns([2, 2, 3])
-
+filtered = data.copy()
 with filter1:
     eqp_options = ["All"] + sorted(data["eqp_type"].dropna().unique().tolist())
     selected_eqp = st.selectbox("Equipment type", eqp_options)
@@ -736,48 +512,143 @@ if search_text:
 
 filtered = filtered.sort_values(["category", "item"]).reset_index(drop=True)
 
-cdf = get_cart_df()
+# =========================================================
+# Main layout
+# =========================================================
+left_col, right_col = st.columns([2, 1])
 
-# Layout
-if mobile_view:
-    # STACKED MOBILE LAYOUT
-    render_available_items_mobile(filtered)
-    st.divider()
-    render_cart_mobile(cdf)
-else:
-    # DESKTOP LAYOUT
-    left_col, right_col = st.columns([2, 1])
+# ---------------------------------------------------------
+# Available items
+# ---------------------------------------------------------
+with left_col:
+    st.markdown("## Available items")
 
-    with left_col:
-        render_available_items_desktop(filtered)
+    if filtered.empty:
+        st.warning("No items match the current filters.")
+    else:
+        # Header row
+        h1, h2, h3, h4, h5, h6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
+        with h1:
+            st.markdown("**Item**")
+        with h2:
+            st.markdown("**Equipment category**")
+        with h3:
+            st.markdown("**Category**")
+        with h4:
+            st.markdown("**Unit price**")
+        with h5:
+            st.markdown("**Quantity**")
+        with h6:
+            st.markdown("**Action**")
 
-    with right_col:
-        render_cart_desktop(cdf)
+        st.divider()
 
-# Bottom actions
-st.divider()
-bottom1, bottom2 = st.columns([1, 1])
+        # Data rows
+        for idx, row in filtered.iterrows():
+            c1, c2, c3, c4, c5, c6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
 
-with bottom1:
-    if st.button("Clear cart", use_container_width=True):
-        st.session_state.cart = []
-        st.rerun()
+            with c1:
+                st.markdown(f"**{row['item']}**")
 
-with bottom2:
-    excel_data = to_excel_bytes(cdf)
-    st.download_button(
-        label="Download Excel",
-        data=excel_data,
-        file_name="cart.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
+            with c2:
+                st.write(row["eqp_type"])
 
+            with c3:
+                st.write(row["category"])
+
+            with c4:
+                st.write(f"{row['price']:.2f}")
+
+            with c5:
+                qty = st.number_input(
+                    "Quantity",
+                    min_value=1,
+                    max_value=1000,
+                    value=1,
+                    step=1,
+                    key=f"qty_{idx}",
+                    label_visibility="collapsed"
+                )
+
+            with c6:
+                if st.button("Add", key=f"add_{idx}", use_container_width=True):
+                    add_to_cart(row, qty)
+                    st.rerun()
+
+# ---------------------------------------------------------
+# Cart
+# ---------------------------------------------------------
+with right_col:
+    st.markdown("## Cart")
+
+    cdf = get_cart_df()
+
+    if cdf.empty:
+        st.info("Cart is empty.")
+    else:
+        # Header row
+        h1, h2, h3, h4, h5 = st.columns([3, 2, 2, 2, 1.2])
+        with h1:
+            st.markdown("**Item**")
+        with h2:
+            st.markdown("**Equipment category**")
+        with h3:
+            st.markdown("**Price (€)**")
+        with h4:
+            st.markdown("**Quantity**")
+
+        st.divider()
+
+        for i, row in cdf.iterrows():
+            a, b, c, d, e = st.columns([3, 1.5, 1.5, 1, 1.2])
+
+            with a:
+                st.markdown(
+                    f"""
+                    <div style="line-height:1.0;">
+                        <div style="font-weight:600;">{row['item']}</div>
+                        <div style="font-size:12px;color:gray;">{row['category']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            with b:
+                st.write(row["eqp_type"])
+
+            with c:
+                st.write(f"{int(row['price'])}")
+
+            with d:
+                st.write(f"{int(row['qty'])}")
+            with e:
+                if st.button("Remove", key=f"remove_{i}", use_container_width=True):
+                    st.session_state.cart.pop(i)
+                    st.rerun()
+
+        st.divider()
+        total = cdf["line_total"].sum()
+        st.markdown(f"## Total: {total:.2f}")
+
+        btn1, btn2 = st.columns(2)
+
+        with btn1:
+            if st.button("Clear cart", use_container_width=True):
+                st.session_state.cart = []
+                st.rerun()
+
+        with btn2:
+            excel_data = to_excel_bytes(cdf)
+            st.download_button(
+                label="Download Excel",
+                data=excel_data,
+                file_name="cart.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+# =========================================================
 # Optional preview
+# =========================================================
 with st.expander("Preview normalized data used by app"):
     st.dataframe(data, use_container_width=True)
-import base64
-from io import BytesIO
-import requests
-import unicodedata
-from pathlib import Path
