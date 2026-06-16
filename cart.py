@@ -176,8 +176,19 @@ def reset_setup(keep_cart=False):
 # =========================================================
 # Title
 # =========================================================
-st.title("🛒 Excel Cart")
-st.caption("Upload an Excel file, map columns once, then use compact filters and a cart.")
+
+col1, col2 = st.columns([1, 6])
+
+with col1:
+    st.image("main_logo.png", width=200)   # adjust size
+
+with col2:
+    st.markdown(
+        "<h1 style='margin-bottom:0;'>PharmaGroup catalogue</h1>",
+        unsafe_allow_html=True
+    )
+    st.caption("Upload an Excel file, map columns once, then use compact filters and a cart.")
+
 
 # =========================================================
 # Setup section (visible only before confirm)
