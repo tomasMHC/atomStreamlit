@@ -116,12 +116,7 @@ def try_autoload_default_excel():
     st.session_state.setup_done = True
 
 
-if not st.session_state.setup_done:
-    try:
-        try_autoload_default_excel()
-        st.rerun()
-    except Exception as e:
-        st.warning(f"Automatic private Excel load failed: {e}")
+
 
 
 # =========================================================
@@ -286,6 +281,14 @@ st.markdown(
 # =========================================================
 # Setup section (visible only before confirm)
 # =========================================================
+
+if not st.session_state.setup_done:
+    try:
+        try_autoload_default_excel()
+        st.rerun()
+    except Exception as e:
+        st.warning(f"Automatic private Excel load failed: {e}")
+
 if not st.session_state.setup_done:
     st.subheader("Setup")
 
