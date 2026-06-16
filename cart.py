@@ -391,13 +391,13 @@ with left_col:
         st.warning("No items match the current filters.")
     else:
         # Header row
-        h1, h2, h3, h4, h5 = st.columns([4, 2, 1.3, 1.2, 1.2])
+        h1, h2, h3, h4, h5 = st.columns([3.5, 2, 1.3, 1.2, 1.2])
         with h1:
             st.markdown("**Item**")
         with h2:
             st.markdown("**Category**")
         with h3:
-            st.markdown("**Unit price**")
+            st.markdown("**Unit price (€)**")
         with h4:
             st.markdown("**Quantity**")
         with h5:
@@ -407,7 +407,7 @@ with left_col:
 
         # Data rows
         for idx, row in filtered.iterrows():
-            c1, c2, c3, c4, c5 = st.columns([4, 2, 1.3, 1.2, 1.2])
+            c1, c2, c3, c4, c5 = st.columns([3.5, 2, 1.3, 1.2, 1.2])
 
             with c1:
                 st.markdown(
