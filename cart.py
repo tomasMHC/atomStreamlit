@@ -3,6 +3,7 @@ import pandas as pd
 import base64
 from io import BytesIO
 import requests
+import unicodedata
 
 
 @st.cache_data(show_spinner=False)
@@ -122,14 +123,25 @@ def try_autoload_default_excel():
 # =========================================================
 # Helpers
 # =========================================================
+def normalize_text(text):
+    """
+    Lowercase, strip spaces, and remove accents/diacritics.
+    """
+    text = str(text).strip().lower()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return text
+
 def guess_column(columns, candidates):
     """
     Try to guess a matching column from provided candidates.
+    Handles accents like: Kategória -> kategoria
     """
-    normalized = {str(c).strip().lower(): c for c in columns}
+    normalized = {normalize_text(c): c for c in columns}
     for cand in candidates:
-        if cand in normalized:
-            return normalized[cand]
+        cand_norm = normalize_text(cand)
+        if cand_norm in normalized:
+            return normalized[cand_norm]
     return None
 
 
