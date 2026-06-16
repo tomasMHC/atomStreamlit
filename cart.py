@@ -468,7 +468,7 @@ with right_col:
         st.divider()
 
         for i, row in cdf.iterrows():
-            a, b, c, d, e = st.columns([3, 2, 2, 2, 1.2])
+            a, b, c, d, e = st.columns([3, 1.5, 1.5, 1.5, 1.0])
 
             with a:
                 st.markdown(
