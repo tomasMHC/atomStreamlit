@@ -470,7 +470,9 @@ with top_mid:
 with top_right:
     if st.button("Change file / remap"):
         reset_setup(keep_cart=False)
+        st.session_state.autoload_enabled = False
         st.rerun()
+
 
 # =========================================================
 # Compact dropdown filters
