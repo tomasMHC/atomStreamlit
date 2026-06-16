@@ -188,7 +188,7 @@ logo_base64 = load_logo("main_logo.png")
 st.markdown(
     f"""
     <div style="display:flex;align-items:center;gap:15px;">
-        <img src="data:image/png;base64,{logo_base64}" width="70">
+        <img src="data:image/png;base64,{logo_base64}" width="100">
         <div>
             <h1 style="margin-bottom:0;">PharmaGroup catalogue</h1>
             <p style="margin-top:0;color:gray;">
