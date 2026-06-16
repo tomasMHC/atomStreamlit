@@ -1,0 +1,3 @@
+# .streamlit/config.toml
+[client]
+toolbarMode = "minimal"
