@@ -6,9 +6,6 @@ import requests
 import unicodedata
 
 
-
-
-
 st.set_page_config(page_title="Excel Cart", layout="wide")
 
 # =========================================================
@@ -77,7 +74,8 @@ footer {
 </style>
 """, unsafe_allow_html=True)
 
-
+if "autoload_enabled" not in st.session_state:
+    st.session_state.autoload_enabled = True
 
 
 
@@ -326,7 +324,7 @@ st.markdown(
 # Setup section (visible only before confirm)
 # =========================================================
 
-if not st.session_state.setup_done:
+if not st.session_state.setup_done and st.session_state.autoload_enabled:
     try:
         try_autoload_default_excel()
         st.rerun()
