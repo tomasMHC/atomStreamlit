@@ -95,7 +95,7 @@ def load_selected_sheets(file_bytes, selected_sheets):
 def build_standard_table(df, item_col, category_col, price_col):
     """
     Normalize user-selected columns into:
-    item, category, price, sheet
+    item, category, price, eqp_type
     """
     out = df.rename(columns={
         item_col: "item",
@@ -114,7 +114,8 @@ def build_standard_table(df, item_col, category_col, price_col):
     out = out[out["item"] != ""]
     out = out[out["category"] != ""]
 
-    out = out.rename(columns={"__sheet__": "sheet"})
+    # sheet name = equipment type
+    out = out.rename(columns={"__sheet__": "eqp_type"})
     out = out.reset_index(drop=True)
 
     return out
@@ -127,14 +128,14 @@ def add_to_cart(item_row, qty):
     item_name = item_row["item"]
     category = item_row["category"]
     price = float(item_row["price"])
-    sheet = item_row["sheet"]
+    eqp_type = item_row["eqp_type"]
 
     for cart_item in st.session_state.cart:
         if (
             cart_item["item"] == item_name and
             cart_item["category"] == category and
             cart_item["price"] == price and
-            cart_item["sheet"] == sheet
+            cart_item["eqp_type"] == eqp_type
         ):
             cart_item["qty"] += qty
             return
@@ -144,8 +145,9 @@ def add_to_cart(item_row, qty):
         "category": category,
         "price": price,
         "qty": qty,
-        "sheet": sheet
+        "eqp_type": eqp_type
     })
+
 
 
 def get_cart_df():
@@ -154,13 +156,13 @@ def get_cart_df():
     """
     if not st.session_state.cart:
         return pd.DataFrame(columns=[
-            "item", "category", "sheet", "price", "qty", "line_total"
+            "item", "category", "eqp_type", "price", "qty", "line_total"
         ])
 
     df = pd.DataFrame(st.session_state.cart)
     df["line_total"] = df["price"] * df["qty"]
 
-    return df[["item", "category", "sheet", "price", "qty", "line_total"]]
+    return df[["item", "category", "eqp_type", "price", "qty", "line_total"]]
 
 
 def reset_setup(keep_cart=False):
@@ -350,14 +352,14 @@ with top_right:
 # Compact dropdown filters
 # =========================================================
 filter1, filter2, filter3 = st.columns([2, 2, 3])
-
+filtered = data.copy()
 with filter1:
-    sheet_options = ["All"] + sorted(data["sheet"].dropna().unique().tolist())
-    selected_sheet = st.selectbox("Sheet", sheet_options)
+    eqp_options = ["All"] + sorted(data["eqp_type"].dropna().unique().tolist())
+    selected_eqp = st.selectbox("Equipment type", eqp_options)
 
 filtered = data.copy()
-if selected_sheet != "All":
-    filtered = filtered[filtered["sheet"] == selected_sheet].copy()
+if selected_eqp != "All":
+    filtered = filtered[filtered["eqp_type"] == selected_eqp].copy()
 
 with filter2:
     category_options = ["All"] + sorted(filtered["category"].dropna().unique().tolist())
@@ -391,42 +393,39 @@ with left_col:
         st.warning("No items match the current filters.")
     else:
         # Header row
-        h1, h2, h3, h4, h5 = st.columns([3.5, 2, 1.3, 1.2, 1.2])
+        h1, h2, h3, h4, h5, h6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
         with h1:
             st.markdown("**Item**")
         with h2:
-            st.markdown("**Category**")
+            st.markdown("**Equipment category**")
         with h3:
-            st.markdown("**Unit price (€)**")
+            st.markdown("**Category**")
         with h4:
-            st.markdown("**Quantity**")
+            st.markdown("**Unit price**")
         with h5:
+            st.markdown("**Quantity**")
+        with h6:
             st.markdown("**Action**")
 
         st.divider()
 
         # Data rows
         for idx, row in filtered.iterrows():
-            c1, c2, c3, c4, c5 = st.columns([3.5, 2, 1.3, 1.2, 1.2])
+            c1, c2, c3, c4, c5, c6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
 
             with c1:
-                st.markdown(
-                    f"""
-                    <div style="line-height:1.1;">
-                        <div style="font-weight:600;">{row['item']}</div>
-                        <div style="font-size:12px;color:gray;">Sheet: {row['sheet']}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                st.markdown(f"**{row['item']}**")
 
             with c2:
-                st.write(row["category"])
+                st.write(row["eqp_type"])
 
             with c3:
-                st.write(f"{row['price']:.2f}")
+                st.write(row["category"])
 
             with c4:
+                st.write(f"{row['price']:.2f}")
+
+            with c5:
                 qty = st.number_input(
                     "Quantity",
                     min_value=1,
@@ -437,10 +436,11 @@ with left_col:
                     label_visibility="collapsed"
                 )
 
-            with c5:
+            with c6:
                 if st.button("Add", key=f"add_{idx}", use_container_width=True):
                     add_to_cart(row, qty)
                     st.rerun()
+
 # ---------------------------------------------------------
 # Cart
 # ---------------------------------------------------------
@@ -452,18 +452,41 @@ with right_col:
     if cdf.empty:
         st.info("Cart is empty.")
     else:
+        # Header row
+        h1, h2, h3, h4 = st.columns([3, 2, 2, 1.2])
+        with h1:
+            st.markdown("**Item**")
+        with h2:
+            st.markdown("**Equipment type**")
+        with h3:
+            st.markdown("**Qty × Unit price**")
+        with h4:
+            st.markdown("**Action**")
+
+        st.divider()
+
         for i, row in cdf.iterrows():
-            a, b, c = st.columns([3, 1.2, 1])
+            a, b, c, d = st.columns([3, 2, 2, 1.2])
 
             with a:
-                st.write(f"**{row['item']}**")
-                st.caption(f"{row['category']} | {row['sheet']}")
+                st.markdown(
+                    f"""
+                    <div style="line-height:1.1;">
+                        <div style="font-weight:600;">{row['item']}</div>
+                        <div style="font-size:12px;color:gray;">{row['category']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
             with b:
-                st.write(f"{int(row['qty'])} × {row['price']:.2f}")
+                st.write(row["eqp_type"])
 
             with c:
-                if st.button("Remove", key=f"remove_{i}"):
+                st.write(f"{int(row['qty'])} × {row['price']:.2f}")
+
+            with d:
+                if st.button("Remove", key=f"remove_{i}", use_container_width=True):
                     st.session_state.cart.pop(i)
                     st.rerun()
 
@@ -474,7 +497,7 @@ with right_col:
         btn1, btn2 = st.columns(2)
 
         with btn1:
-            if st.button("Clear cart"):
+            if st.button("Clear cart", use_container_width=True):
                 st.session_state.cart = []
                 st.rerun()
 
@@ -483,7 +506,8 @@ with right_col:
                 label="Download CSV",
                 data=cdf.to_csv(index=False).encode("utf-8"),
                 file_name="cart.csv",
-                mime="text/csv"
+                mime="text/csv",
+                use_container_width=True
             )
 
 # =========================================================
