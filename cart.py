@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import base64
+
+def load_logo(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
 
 st.set_page_config(page_title="Excel Cart", layout="wide")
 
@@ -177,17 +183,23 @@ def reset_setup(keep_cart=False):
 # Title
 # =========================================================
 
-col1, col2 = st.columns([1, 6])
+logo_base64 = load_logo("logo.png")
 
-with col1:
-    st.image("main_logo.png", width=80)   # adjust size
+st.markdown(
+    f"""
+    <div style="display:flex;align-items:center;gap:15px;">
+        <img src="data:image/png;base64,{logo_base64}" width="70">
+        <div>
+            <h1 style="margin-bottom:0;">PharmaGroup catalogue</h1>
+            <p style="margin-top:0;color:gray;">
+                Upload an Excel file, map columns once, then use compact filters and a cart.
+            </p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-with col2:
-    st.markdown(
-        "<h1 style='margin-bottom:0;'>PharmaGroup catalogue</h1>",
-        unsafe_allow_html=True
-    )
-    st.caption("Upload an Excel file, map columns once, then use compact filters and a cart.")
 
 
 # =========================================================
