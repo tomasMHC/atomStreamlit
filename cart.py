@@ -453,20 +453,22 @@ with right_col:
         st.info("Cart is empty.")
     else:
         # Header row
-        h1, h2, h3, h4 = st.columns([3, 2, 2, 1.2])
+        h1, h2, h3, h4, h5 = st.columns([3, 2, 2, 2, 1.2])
         with h1:
             st.markdown("**Item**")
         with h2:
-            st.markdown("**Equipment type**")
+            st.markdown("**Equipment category**")
         with h3:
-            st.markdown("**Qty × Unit price**")
+            st.markdown("**Quantity**")
         with h4:
-            st.markdown("**Action**")
+            st.markdown("**Price (€)**")
+        with h5:
+            st.markdown("****")
 
         st.divider()
 
         for i, row in cdf.iterrows():
-            a, b, c, d = st.columns([3, 2, 2, 1.2])
+            a, b, c, d, e = st.columns([3, 2, 2, 2, 1.2])
 
             with a:
                 st.markdown(
