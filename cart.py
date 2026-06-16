@@ -4,7 +4,7 @@ import base64
 from io import BytesIO
 import requests
 import unicodedata
-
+from pathlib import Path
 
 st.set_page_config(page_title="Excel Cart", layout="wide")
 
@@ -35,6 +35,16 @@ if "category_col" not in st.session_state:
 if "price_col" not in st.session_state:
     st.session_state.price_col = None
 
+if "autoload_enabled" not in st.session_state:
+    st.session_state.autoload_enabled = True
+
+if "next_cart_id" not in st.session_state:
+    st.session_state.next_cart_id = 1
+
+
+# =========================================================
+# Styling
+# =========================================================
 st.markdown("""
 <style>
 /* Hide top header area */
@@ -71,33 +81,25 @@ footer {
 [data-testid="stDecoration"] {
     display: none !important;
 }
-</style>
-""", unsafe_allow_html=True)
 
-st.markdown("""
-<style>
+/* Make numeric inputs a bit narrower */
 div[data-baseweb="input"] {
     min-width: 80px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-if "autoload_enabled" not in st.session_state:
-    st.session_state.autoload_enabled = True
-
-
-
 
 # =========================================================
 # Helpers
 # =========================================================
-
-def to_excel_bytes(df):
+def to_excel_bytes(df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Cart")
     output.seek(0)
     return output.getvalue()
+
 
 @st.cache_data(show_spinner=False)
 def download_excel_from_private_url():
@@ -116,58 +118,6 @@ def download_excel_from_private_url():
 
     return response.content
 
-def try_autoload_default_excel():
-    """
-    Try to auto-load the private Excel file from secrets and build app data.
-    If successful, store normalized data directly into session state.
-    """
-    file_bytes = download_excel_from_private_url()
-    sheet_names = get_excel_sheets(file_bytes)
-
-    raw_df = load_selected_sheets(file_bytes, sheet_names)
-    if raw_df.empty:
-        raise ValueError("No data found in the private Excel file.")
-
-    available_cols = [c for c in raw_df.columns if c != "__sheet__"]
-
-    item_guess = guess_column(
-        available_cols,
-        ["polozky","item", "name", "product", "part", "part name", "material", "description"]
-    )
-    category_guess = guess_column(
-        available_cols,
-        ["kategoria","category", "group", "type", "family", "class"]
-    )
-    price_guess = guess_column(
-        available_cols,
-        ["cena","price", "cost", "unit price (€)", "amount", "value"]
-    )
-
-    if not item_guess or not category_guess or not price_guess:
-        raise ValueError(
-            f"Could not auto-detect required columns. Found columns: {available_cols}"
-        )
-
-    data = build_standard_table(raw_df, item_guess, category_guess, price_guess)
-    if data.empty:
-        raise ValueError("No valid rows found after normalization.")
-
-    st.session_state.file_bytes = file_bytes
-    st.session_state.data = data
-    st.session_state.selected_sheets = sheet_names
-    st.session_state.item_col = item_guess
-    st.session_state.category_col = category_guess
-    st.session_state.price_col = price_guess
-    st.session_state.setup_done = True
-
-def get_excel_sheets(file_bytes):
-    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
-    return xl.sheet_names
-
-
-def load_logo(path):
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode()
 
 def normalize_text(text):
     """
@@ -177,6 +127,7 @@ def normalize_text(text):
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     return text
+
 
 def guess_column(columns, candidates):
     """
@@ -193,7 +144,7 @@ def guess_column(columns, candidates):
 
 def get_excel_sheets(file_bytes):
     """
-    Return sheet names from uploaded Excel bytes.
+    Return sheet names from Excel bytes.
     """
     xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
     return xl.sheet_names
@@ -255,31 +206,33 @@ def build_standard_table(df, item_col, category_col, price_col):
 
 def add_to_cart(item_row, qty):
     """
-    Add item to cart. If item already exists, increase quantity.
+    Add item to cart. If the same item already exists, increase quantity.
     """
-    item_name = item_row["item"]
-    category = item_row["category"]
+    item_name = str(item_row["item"])
+    category = str(item_row["category"])
     price = float(item_row["price"])
-    eqp_type = item_row["eqp_type"]
+    eqp_type = str(item_row["eqp_type"])
 
     for cart_item in st.session_state.cart:
         if (
-            cart_item["item"] == item_name and
-            cart_item["category"] == category and
-            cart_item["price"] == price and
-            cart_item["eqp_type"] == eqp_type
+            cart_item["item"] == item_name
+            and cart_item["category"] == category
+            and cart_item["price"] == price
+            and cart_item["eqp_type"] == eqp_type
         ):
-            cart_item["qty"] += qty
+            cart_item["qty"] += int(qty)
             return
 
     st.session_state.cart.append({
+        "cart_id": st.session_state.next_cart_id,
         "item": item_name,
         "category": category,
         "price": price,
-        "qty": qty,
+        "qty": int(qty),
         "eqp_type": eqp_type
     })
 
+    st.session_state.next_cart_id += 1
 
 
 def get_cart_df():
@@ -311,6 +264,9 @@ def reset_setup(keep_cart=False):
 
     if not keep_cart:
         st.session_state.cart = []
+        st.session_state.next_cart_id = 1
+        clear_cart_qty_widget_state()
+
 
 def update_cart_qty(index, new_qty):
     """
@@ -319,6 +275,7 @@ def update_cart_qty(index, new_qty):
     """
     if int(new_qty) < 1:
         st.session_state.cart.pop(index)
+        clear_cart_qty_widget_state()
     else:
         st.session_state.cart[index]["qty"] = int(new_qty)
 
@@ -332,33 +289,92 @@ def clear_cart_qty_widget_state():
         if str(key).startswith("cart_qty_"):
             del st.session_state[key]
 
+
+def load_logo(path):
+    """
+    Return base64 string for logo or None if file does not exist.
+    """
+    p = Path(path)
+    if not p.exists():
+        return None
+
+    with open(p, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
+def try_autoload_default_excel():
+    """
+    Try to auto-load the private Excel file from secrets and build app data.
+    If successful, store normalized data directly into session state.
+    """
+    file_bytes = download_excel_from_private_url()
+    sheet_names = get_excel_sheets(file_bytes)
+
+    raw_df = load_selected_sheets(file_bytes, sheet_names)
+    if raw_df.empty:
+        raise ValueError("No data found in the private Excel file.")
+
+    available_cols = [c for c in raw_df.columns if c != "__sheet__"]
+
+    item_guess = guess_column(
+        available_cols,
+        ["polozky", "item", "name", "product", "part", "part name", "material", "description"]
+    )
+    category_guess = guess_column(
+        available_cols,
+        ["kategoria", "category", "group", "type", "family", "class"]
+    )
+    price_guess = guess_column(
+        available_cols,
+        ["cena", "price", "cost", "unit price (€)", "unit price", "amount", "value"]
+    )
+
+    if not item_guess or not category_guess or not price_guess:
+        raise ValueError(
+            f"Could not auto-detect required columns. Found columns: {available_cols}"
+        )
+
+    data = build_standard_table(raw_df, item_guess, category_guess, price_guess)
+    if data.empty:
+        raise ValueError("No valid rows found after normalization.")
+
+    st.session_state.file_bytes = file_bytes
+    st.session_state.data = data
+    st.session_state.selected_sheets = sheet_names
+    st.session_state.item_col = item_guess
+    st.session_state.category_col = category_guess
+    st.session_state.price_col = price_guess
+    st.session_state.setup_done = True
+
+
 # =========================================================
 # Title
 # =========================================================
-
 logo_base64 = load_logo("main_logo.png")
 
-st.markdown(
-    f"""
-    <div style="display:flex;align-items:center;gap:15px;">
-        <img src="data:image/png;base64,{logo_base64}" width="100">
-        <div>
-            <h1 style="margin-bottom:0;">PharmaGroup catalogue</h1>
-            <p style="margin-top:0;color:gray;">
-                Upload an Excel file, map columns once, then use compact filters and a cart.
-            </p>
+if logo_base64:
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;gap:15px;">
+            <img src="data:image/png;base64,{logo_base64}" width="100">
+            <div>
+                <h1 style="margin-bottom:0;">PharmaGroup catalogue</h1>
+                <p style="margin-top:0;color:gray;">
+                    Upload an Excel file, map columns once, then use compact filters and a cart.
+                </p>
+            </div>
         </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.title("PharmaGroup catalogue")
+    st.caption("Upload an Excel file, map columns once, then use compact filters and a cart.")
 
 
 # =========================================================
 # Setup section (visible only before confirm)
 # =========================================================
-
 if not st.session_state.setup_done and st.session_state.autoload_enabled:
     try:
         try_autoload_default_excel()
@@ -425,7 +441,7 @@ if not st.session_state.setup_done:
     )
     price_guess = guess_column(
         available_cols,
-        ["price", "cost", "unit price", "amount", "value"]
+        ["price", "cost", "unit price", "unit price (€)", "amount", "value"]
     )
 
     c1, c2, c3 = st.columns(3)
@@ -480,6 +496,7 @@ if not st.session_state.setup_done:
 
     st.stop()
 
+
 # =========================================================
 # Compact mode (after setup)
 # =========================================================
@@ -491,6 +508,7 @@ if data is None or data.empty:
         reset_setup(keep_cart=False)
         st.rerun()
     st.stop()
+
 
 # Top compact controls
 top_left, top_mid, top_right = st.columns([3, 2, 1])
@@ -513,12 +531,13 @@ with top_right:
 # Compact dropdown filters
 # =========================================================
 filter1, filter2, filter3 = st.columns([2, 2, 3])
+
 filtered = data.copy()
+
 with filter1:
     eqp_options = ["All"] + sorted(data["eqp_type"].dropna().unique().tolist())
     selected_eqp = st.selectbox("Equipment type", eqp_options)
 
-filtered = data.copy()
 if selected_eqp != "All":
     filtered = filtered[filtered["eqp_type"] == selected_eqp].copy()
 
@@ -539,6 +558,7 @@ if search_text:
 
 filtered = filtered.sort_values(["category", "item"]).reset_index(drop=True)
 
+
 # =========================================================
 # Main layout
 # =========================================================
@@ -553,8 +573,7 @@ with left_col:
     if filtered.empty:
         st.warning("No items match the current filters.")
     else:
-        # Header row
-        h1, h2, h3, h4, h6 = st.columns([4, 2, 2, 1.3, 1.2])
+        h1, h2, h3, h4, h5 = st.columns([4, 2, 2, 1.3, 1.2])
         with h1:
             st.markdown("**Item**")
         with h2:
@@ -563,14 +582,11 @@ with left_col:
             st.markdown("**Category**")
         with h4:
             st.markdown("**Unit price (€)**")
-        # with h5:
-        #     st.markdown("**Quantity**")
 
         st.divider()
 
-        # Data rows
         for idx, row in filtered.iterrows():
-            c1, c2, c3, c4, c6 = st.columns([4, 2, 2, 1.3, 1.2])
+            c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 1.3, 1.2])
 
             with c1:
                 st.markdown(f"**{row['item']}**")
@@ -584,21 +600,11 @@ with left_col:
             with c4:
                 st.write(f"{row['price']:.2f}")
 
-            # with c5:
-            #     qty = st.number_input(
-            #         "Quantity",
-            #         min_value=1,
-            #         max_value=1000,
-            #         value=1,
-            #         step=1,
-            #         key=f"qty_{idx}",
-            #         label_visibility="collapsed"
-            #     )
-
-            with c6:
+            with c5:
                 if st.button("Add", key=f"add_{idx}", use_container_width=True):
                     add_to_cart(row, 1)
                     st.rerun()
+
 
 # ---------------------------------------------------------
 # Cart
@@ -611,66 +617,67 @@ with right_col:
     if cdf.empty:
         st.info("Cart is empty.")
     else:
-        # Header row
-        h1, h2, h3, h4, h5 = st.columns([3, 2, 2, 2, 1.2])
+        h1, h2, h3, h4, h5 = st.columns([3, 1.5, 1.5, 1.2, 1.2])
         with h1:
             st.markdown("**Item**")
         with h2:
-            st.markdown("**Equipment category**")
+            st.markdown("**Equipment type**")
         with h3:
             st.markdown("**Price (€)**")
         with h4:
             st.markdown("**Quantity**")
+        with h5:
+            st.markdown("")
 
         st.divider()
 
-    for i, row in cdf.iterrows():
-        a, b, c, d, e = st.columns([3, 1.5, 1.5, 1.2, 1.2])
+        for i, row in cdf.iterrows():
+            a, b, c, d, e = st.columns([3, 1.5, 1.5, 1.2, 1.2])
 
-        with a:
-            st.markdown(
-                f"""
-                <div style="line-height:1.0;">
-                    <div style="font-weight:600;">{row['item']}</div>
-                    <div style="font-size:12px;color:gray;">{row['category']}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            with a:
+                st.markdown(
+                    f"""
+                    <div style="line-height:1.0;">
+                        <div style="font-weight:600;">{row['item']}</div>
+                        <div style="font-size:12px;color:gray;">{row['category']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-        with b:
-            st.write(row["eqp_type"])
+            with b:
+                st.write(row["eqp_type"])
 
-        with c:
-            st.write(f"{row['price']:.2f}")
+            with c:
+                st.write(f"{row['price']:.2f}")
 
-        with d:
-            qty_key = f"cart_qty_{i}"
+            with d:
+                qty_key = f"cart_qty_{i}"
 
-            if qty_key not in st.session_state:
-                st.session_state[qty_key] = int(row["qty"])
+                if qty_key not in st.session_state:
+                    st.session_state[qty_key] = int(row["qty"])
 
-            new_qty = st.number_input(
-                "Quantity",
-                min_value=1,
-                max_value=1000,
-                step=1,
-                key=qty_key,
-                label_visibility="collapsed"
-            )
+                new_qty = st.number_input(
+                    "Quantity",
+                    min_value=1,
+                    max_value=1000,
+                    step=1,
+                    key=qty_key,
+                    label_visibility="collapsed"
+                )
 
-            # Update cart when quantity changes
-            if int(new_qty) != int(row["qty"]):
-                update_cart_qty(i, new_qty)
-                st.rerun()
+                if int(new_qty) != int(row["qty"]):
+                    update_cart_qty(i, new_qty)
+                    st.rerun()
 
-        with e:
-            if st.button("Remove", key=f"remove_{i}", use_container_width=True):
-                st.session_state.cart.pop(i)
-                clear_cart_qty_widget_state()
-                st.rerun()
+            with e:
+                if st.button("Remove", key=f"remove_{i}", use_container_width=True):
+                    st.session_state.cart.pop(i)
+                    clear_cart_qty_widget_state()
+                    st.rerun()
 
-        st.divider()
+            st.divider()
+
         total = cdf["line_total"].sum()
         st.markdown(f"## Total: {total:.2f}")
 
@@ -679,6 +686,7 @@ with right_col:
         with btn1:
             if st.button("Clear cart", use_container_width=True):
                 st.session_state.cart = []
+                st.session_state.next_cart_id = 1
                 clear_cart_qty_widget_state()
                 st.rerun()
 
@@ -691,6 +699,7 @@ with right_col:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
+
 
 # =========================================================
 # Optional preview
