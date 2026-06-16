@@ -562,7 +562,7 @@ filtered = filtered.sort_values(["category", "item"]).reset_index(drop=True)
 # =========================================================
 # Main layout
 # =========================================================
-left_col, right_col = st.columns([2, 1])
+left_col, right_col = st.columns([2.5, 1.5])
 
 # ---------------------------------------------------------
 # Available items
