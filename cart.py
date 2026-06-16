@@ -83,6 +83,14 @@ if "autoload_enabled" not in st.session_state:
 # =========================================================
 # Helpers
 # =========================================================
+
+def to_excel_bytes(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Cart")
+    output.seek(0)
+    return output.getvalue()
+
 @st.cache_data(show_spinner=False)
 def download_excel_from_private_url():
     """
@@ -630,9 +638,10 @@ with right_col:
                 st.rerun()
 
         with btn2:
+            excel_data = to_excel_bytes(cdf)
             st.download_button(
                 label="Download Excel",
-                data=cdf.to_excel(index=False, engine="openpyxl"),
+                data=excel_data,
                 file_name="cart.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
