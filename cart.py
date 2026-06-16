@@ -462,8 +462,6 @@ with right_col:
             st.markdown("**Price (€)**")
         with h4:
             st.markdown("**Quantity**")
-        with h5:
-            st.markdown("****")
 
         st.divider()
 
@@ -473,7 +471,7 @@ with right_col:
             with a:
                 st.markdown(
                     f"""
-                    <div style="line-height:1.1;">
+                    <div style="line-height:1.0;">
                         <div style="font-weight:600;">{row['item']}</div>
                         <div style="font-size:12px;color:gray;">{row['category']}</div>
                     </div>
