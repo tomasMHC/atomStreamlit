@@ -23,6 +23,11 @@ def download_excel_from_private_url():
     return response.content
 
 
+def get_excel_sheets(file_bytes):
+    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
+    return xl.sheet_names
+
+
 def load_logo(path):
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
