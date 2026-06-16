@@ -1,7 +1,27 @@
 import streamlit as st
 import pandas as pd
-from io import BytesIO
 import base64
+from io import BytesIO
+import requests
+
+
+@st.cache_data(show_spinner=False)
+def download_excel_from_private_url():
+    """
+    Download Excel bytes from a private URL stored in Streamlit secrets.
+    Supports optional Authorization header.
+    """
+    excel_url = st.secrets["excel_url"]
+
+    headers = {}
+    if "excel_auth_header" in st.secrets and st.secrets["excel_auth_header"]:
+        headers["Authorization"] = st.secrets["excel_auth_header"]
+
+    response = requests.get(excel_url, headers=headers, timeout=60)
+    response.raise_for_status()
+
+    return response.content
+
 
 def load_logo(path):
     with open(path, "rb") as f:
@@ -44,6 +64,60 @@ div.stButton > button {padding-top: 0.2rem; padding-bottom: 0.2rem; min-height: 
 div[data-testid="stVerticalBlock"] > div {gap: 0.25rem;}
 </style>
 """, unsafe_allow_html=True)
+
+
+def try_autoload_default_excel():
+    """
+    Try to auto-load the private Excel file from secrets and build app data.
+    If successful, store normalized data directly into session state.
+    """
+    file_bytes = download_excel_from_private_url()
+    sheet_names = get_excel_sheets(file_bytes)
+
+    raw_df = load_selected_sheets(file_bytes, sheet_names)
+    if raw_df.empty:
+        raise ValueError("No data found in the private Excel file.")
+
+    available_cols = [c for c in raw_df.columns if c != "__sheet__"]
+
+    item_guess = guess_column(
+        available_cols,
+        ["item", "name", "product", "part", "part name", "material", "description"]
+    )
+    category_guess = guess_column(
+        available_cols,
+        ["category", "group", "type", "family", "class"]
+    )
+    price_guess = guess_column(
+        available_cols,
+        ["price", "cost", "unit price", "amount", "value"]
+    )
+
+    if not item_guess or not category_guess or not price_guess:
+        raise ValueError(
+            f"Could not auto-detect required columns. Found columns: {available_cols}"
+        )
+
+    data = build_standard_table(raw_df, item_guess, category_guess, price_guess)
+    if data.empty:
+        raise ValueError("No valid rows found after normalization.")
+
+    st.session_state.file_bytes = file_bytes
+    st.session_state.data = data
+    st.session_state.selected_sheets = sheet_names
+    st.session_state.item_col = item_guess
+    st.session_state.category_col = category_guess
+    st.session_state.price_col = price_guess
+    st.session_state.setup_done = True
+
+
+if not st.session_state.setup_done:
+    try:
+        try_autoload_default_excel()
+        st.rerun()
+    except Exception as e:
+        st.warning(f"Automatic private Excel load failed: {e}")
+
 
 # =========================================================
 # Helpers
