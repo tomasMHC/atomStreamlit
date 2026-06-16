@@ -312,6 +312,25 @@ def reset_setup(keep_cart=False):
     if not keep_cart:
         st.session_state.cart = []
 
+def update_cart_qty(index, new_qty):
+    """
+    Update quantity of a cart item by index.
+    If qty < 1, remove the item.
+    """
+    if int(new_qty) < 1:
+        st.session_state.cart.pop(index)
+    else:
+        st.session_state.cart[index]["qty"] = int(new_qty)
+
+
+def clear_cart_qty_widget_state():
+    """
+    Remove saved cart quantity widgets from session state.
+    Needed after removing items / clearing cart so indices stay aligned.
+    """
+    for key in list(st.session_state.keys()):
+        if str(key).startswith("cart_qty_"):
+            del st.session_state[key]
 
 # =========================================================
 # Title
@@ -605,32 +624,51 @@ with right_col:
 
         st.divider()
 
-        for i, row in cdf.iterrows():
-            a, b, c, d, e = st.columns([3, 1.5, 1.5, 1, 1.2])
+    for i, row in cdf.iterrows():
+        a, b, c, d, e = st.columns([3, 1.5, 1.5, 1.2, 1.2])
 
-            with a:
-                st.markdown(
-                    f"""
-                    <div style="line-height:1.0;">
-                        <div style="font-weight:600;">{row['item']}</div>
-                        <div style="font-size:12px;color:gray;">{row['category']}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+        with a:
+            st.markdown(
+                f"""
+                <div style="line-height:1.0;">
+                    <div style="font-weight:600;">{row['item']}</div>
+                    <div style="font-size:12px;color:gray;">{row['category']}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-            with b:
-                st.write(row["eqp_type"])
+        with b:
+            st.write(row["eqp_type"])
 
-            with c:
-                st.write(f"{int(row['price'])}")
+        with c:
+            st.write(f"{row['price']:.2f}")
 
-            with d:
-                st.write(f"{int(row['qty'])}")
-            with e:
-                if st.button("Remove", key=f"remove_{i}", use_container_width=True):
-                    st.session_state.cart.pop(i)
-                    st.rerun()
+        with d:
+            qty_key = f"cart_qty_{i}"
+
+            if qty_key not in st.session_state:
+                st.session_state[qty_key] = int(row["qty"])
+
+            new_qty = st.number_input(
+                "Quantity",
+                min_value=1,
+                max_value=1000,
+                step=1,
+                key=qty_key,
+                label_visibility="collapsed"
+            )
+
+            # Update cart when quantity changes
+            if int(new_qty) != int(row["qty"]):
+                update_cart_qty(i, new_qty)
+                st.rerun()
+
+        with e:
+            if st.button("Remove", key=f"remove_{i}", use_container_width=True):
+                st.session_state.cart.pop(i)
+                clear_cart_qty_widget_state()
+                st.rerun()
 
         st.divider()
         total = cdf["line_total"].sum()
@@ -641,6 +679,7 @@ with right_col:
         with btn1:
             if st.button("Clear cart", use_container_width=True):
                 st.session_state.cart = []
+                clear_cart_qty_widget_state()
                 st.rerun()
 
         with btn2:
