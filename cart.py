@@ -1,5 +1,13 @@
 import streamlit as st
-PharmaGroup catalogue", layout="wide")import pandas as pd
+import pandas as pd
+import base64
+from io import BytesIO
+import requests
+import unicodedata
+from pathlib import Path
+
+st.set_page_config(page_title="PharmaGroup catalogue", layout="wide")
+
 
 # =========================================================
 # Session state initialization
