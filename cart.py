@@ -6,32 +6,7 @@ import requests
 import unicodedata
 
 
-@st.cache_data(show_spinner=False)
-def download_excel_from_private_url():
-    """
-    Download Excel bytes from a private URL stored in Streamlit secrets.
-    Supports optional Authorization header.
-    """
-    excel_url = st.secrets["excel_url"]
 
-    headers = {}
-    if "excel_auth_header" in st.secrets and st.secrets["excel_auth_header"]:
-        headers["Authorization"] = st.secrets["excel_auth_header"]
-
-    response = requests.get(excel_url, headers=headers, timeout=60)
-    response.raise_for_status()
-
-    return response.content
-
-
-def get_excel_sheets(file_bytes):
-    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
-    return xl.sheet_names
-
-
-def load_logo(path):
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode()
 
 
 st.set_page_config(page_title="Excel Cart", layout="wide")
@@ -65,12 +40,37 @@ if "price_col" not in st.session_state:
 
 st.markdown("""
 <style>
-.block-container {padding-top: 1rem; padding-bottom: 1rem;}
-div.stButton > button {padding-top: 0.2rem; padding-bottom: 0.2rem; min-height: 2rem;}
-div[data-testid="stVerticalBlock"] > div {gap: 0.25rem;}
+.stAppDeployButton {display:none;}
+#MainMenu {visibility:hidden;}
+footer {visibility:hidden;}
+header {visibility:hidden;}
 </style>
 """, unsafe_allow_html=True)
 
+
+
+
+
+
+# =========================================================
+# Helpers
+# =========================================================
+@st.cache_data(show_spinner=False)
+def download_excel_from_private_url():
+    """
+    Download Excel bytes from a private URL stored in Streamlit secrets.
+    Supports optional Authorization header.
+    """
+    excel_url = st.secrets["excel_url"]
+
+    headers = {}
+    if "excel_auth_header" in st.secrets and st.secrets["excel_auth_header"]:
+        headers["Authorization"] = st.secrets["excel_auth_header"]
+
+    response = requests.get(excel_url, headers=headers, timeout=60)
+    response.raise_for_status()
+
+    return response.content
 
 def try_autoload_default_excel():
     """
@@ -116,13 +116,15 @@ def try_autoload_default_excel():
     st.session_state.price_col = price_guess
     st.session_state.setup_done = True
 
+def get_excel_sheets(file_bytes):
+    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
+    return xl.sheet_names
 
 
+def load_logo(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
 
-
-# =========================================================
-# Helpers
-# =========================================================
 def normalize_text(text):
     """
     Lowercase, strip spaces, and remove accents/diacritics.
