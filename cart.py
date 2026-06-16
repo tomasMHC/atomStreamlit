@@ -183,7 +183,7 @@ def reset_setup(keep_cart=False):
 # Title
 # =========================================================
 
-logo_base64 = load_logo("logo.png")
+logo_base64 = load_logo("main_logo.png")
 
 st.markdown(
     f"""
