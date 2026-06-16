@@ -74,6 +74,14 @@ footer {
 </style>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+<style>
+div[data-baseweb="input"] {
+    min-width: 80px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 if "autoload_enabled" not in st.session_state:
     st.session_state.autoload_enabled = True
 
@@ -132,7 +140,7 @@ def try_autoload_default_excel():
     )
     price_guess = guess_column(
         available_cols,
-        ["cena","price", "cost", "unit price", "amount", "value"]
+        ["cena","price", "cost", "unit price (€)", "amount", "value"]
     )
 
     if not item_guess or not category_guess or not price_guess:
@@ -527,25 +535,23 @@ with left_col:
         st.warning("No items match the current filters.")
     else:
         # Header row
-        h1, h2, h3, h4, h5, h6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
+        h1, h2, h3, h4, h6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
         with h1:
             st.markdown("**Item**")
         with h2:
-            st.markdown("**Equipment category**")
+            st.markdown("**Equipment type**")
         with h3:
             st.markdown("**Category**")
         with h4:
-            st.markdown("**Unit price**")
-        with h5:
-            st.markdown("**Quantity**")
-        with h6:
-            st.markdown("**Action**")
+            st.markdown("**Unit price (€)**")
+        # with h5:
+        #     st.markdown("**Quantity**")
 
         st.divider()
 
         # Data rows
         for idx, row in filtered.iterrows():
-            c1, c2, c3, c4, c5, c6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
+            c1, c2, c3, c4, c6 = st.columns([4, 2, 2, 1.3, 1.2])
 
             with c1:
                 st.markdown(f"**{row['item']}**")
@@ -559,20 +565,20 @@ with left_col:
             with c4:
                 st.write(f"{row['price']:.2f}")
 
-            with c5:
-                qty = st.number_input(
-                    "Quantity",
-                    min_value=1,
-                    max_value=1000,
-                    value=1,
-                    step=1,
-                    key=f"qty_{idx}",
-                    label_visibility="collapsed"
-                )
+            # with c5:
+            #     qty = st.number_input(
+            #         "Quantity",
+            #         min_value=1,
+            #         max_value=1000,
+            #         value=1,
+            #         step=1,
+            #         key=f"qty_{idx}",
+            #         label_visibility="collapsed"
+            #     )
 
             with c6:
                 if st.button("Add", key=f"add_{idx}", use_container_width=True):
-                    add_to_cart(row, qty)
+                    add_to_cart(row, 1)
                     st.rerun()
 
 # ---------------------------------------------------------
