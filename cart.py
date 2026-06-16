@@ -631,10 +631,10 @@ with right_col:
 
         with btn2:
             st.download_button(
-                label="Download CSV",
-                data=cdf.to_csv(index=False).encode("utf-8"),
-                file_name="cart.csv",
-                mime="text/csv",
+                label="Download Excel",
+                data=cdf.to_excel(index=False, engine="openpyxl"),
+                file_name="cart.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
 
