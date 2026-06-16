@@ -40,10 +40,40 @@ if "price_col" not in st.session_state:
 
 st.markdown("""
 <style>
-.stAppDeployButton {display:none;}
-#MainMenu {visibility:hidden;}
-footer {visibility:hidden;}
-header {visibility:hidden;}
+/* Hide top header area */
+header[data-testid="stHeader"] {
+    display: none;
+}
+
+/* Hide Streamlit toolbar / top-right app controls if present */
+[data-testid="stToolbar"] {
+    display: none !important;
+}
+
+/* Hide app deploy button if present */
+.stAppDeployButton {
+    display: none !important;
+}
+
+/* Hide main hamburger menu */
+#MainMenu {
+    visibility: hidden;
+}
+
+/* Hide footer */
+footer {
+    visibility: hidden;
+}
+
+/* Sometimes the bottom-right decoration / status area is rendered in a floating container */
+[data-testid="stStatusWidget"] {
+    display: none !important;
+}
+
+/* Hide element container anchors / decoration if any */
+[data-testid="stDecoration"] {
+    display: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
