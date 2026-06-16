@@ -459,9 +459,9 @@ with right_col:
         with h2:
             st.markdown("**Equipment category**")
         with h3:
-            st.markdown("**Quantity**")
-        with h4:
             st.markdown("**Price (€)**")
+        with h4:
+            st.markdown("**Quantity**")
         with h5:
             st.markdown("****")
 
@@ -485,9 +485,11 @@ with right_col:
                 st.write(row["eqp_type"])
 
             with c:
-                st.write(f"{int(row['qty'])} × {row['price']:.2f}")
+                st.write(f"{int(row['price'])}")
 
             with d:
+                st.write(f"{int(row['qty'])}")
+            with e:
                 if st.button("Remove", key=f"remove_{i}", use_container_width=True):
                     st.session_state.cart.pop(i)
                     st.rerun()
