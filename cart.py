@@ -87,15 +87,15 @@ def try_autoload_default_excel():
 
     item_guess = guess_column(
         available_cols,
-        ["item", "name", "product", "part", "part name", "material", "description"]
+        ["polozky","item", "name", "product", "part", "part name", "material", "description"]
     )
     category_guess = guess_column(
         available_cols,
-        ["category", "group", "type", "family", "class"]
+        ["kategoria","category", "group", "type", "family", "class"]
     )
     price_guess = guess_column(
         available_cols,
-        ["price", "cost", "unit price", "amount", "value"]
+        ["cena","price", "cost", "unit price", "amount", "value"]
     )
 
     if not item_guess or not category_guess or not price_guess:
