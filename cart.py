@@ -535,7 +535,7 @@ with left_col:
         st.warning("No items match the current filters.")
     else:
         # Header row
-        h1, h2, h3, h4, h6 = st.columns([4, 2, 2, 1.3, 1.2, 1.2])
+        h1, h2, h3, h4, h6 = st.columns([4, 2, 2, 1.3, 1.2])
         with h1:
             st.markdown("**Item**")
         with h2:
