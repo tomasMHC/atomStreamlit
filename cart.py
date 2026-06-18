@@ -589,7 +589,7 @@ with left_col:
 with right_col:
     st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
 
-    st.markdown("## Košík")
+    st.markdown("## Zoznam položiek")
 
     cdf = get_cart_df()
 
