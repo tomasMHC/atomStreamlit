@@ -607,15 +607,6 @@ with right_col:
             st.markdown("**Množstvo**")
         with h5:
             st.markdown("")
-        # Súčet ceny pod riadkom
-        st.markdown(
-            f"""
-            <div style="font-size:13px; color:#444; margin-top:-4px; margin-bottom:6px;">
-                <b>Súčet:</b> {row['line_total']:.2f} €
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
 
         st.divider()
 
@@ -626,24 +617,24 @@ with right_col:
                 st.markdown(
                     f"""
                     <div style="line-height:1.0;">
-                        <div style="font-weight:600;">{row['Položka']}</div>
-                        <div style="font-size:12px;color:gray;">{row['Kategória']}</div>
+                        <div style="font-weight:600;">{row['item']}</div>
+                        <div style="font-size:12px;color:gray;">{row['category']}</div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
             with b:
-                st.write(row["Model"])
+                st.write(row["eqp_type"])
 
             with c:
-                st.write(f"{row['Jednotková cena (€)']:.2f}")
+                st.write(f"{row['price']:.2f}")
 
             with d:
                 qty_key = f"cart_qty_{i}"
 
                 if qty_key not in st.session_state:
-                    st.session_state[qty_key] = int(row["Množstvo"])
+                    st.session_state[qty_key] = int(row["qty"])
 
                 new_qty = st.number_input(
                     "Množstvo",
@@ -654,7 +645,7 @@ with right_col:
                     label_visibility="collapsed"
                 )
 
-                if int(new_qty) != int(row["Množstvo"]):
+                if int(new_qty) != int(row["qty"]):
                     update_cart_qty(i, new_qty)
                     st.rerun()
 
@@ -664,7 +655,18 @@ with right_col:
                     clear_cart_qty_widget_state()
                     st.rerun()
 
+            # 🔥 Súčet ceny pod riadkom
+            st.markdown(
+                f"""
+                <div style="font-size:13px; color:#444; margin-top:-4px; margin-bottom:6px;">
+                    <b>Súčet:</b> {row['line_total']:.2f} €
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
             st.divider()
+
 
         total = cdf["Cena (€)"].sum()
         st.markdown(f"## Celkom: {total:.2f} €")
