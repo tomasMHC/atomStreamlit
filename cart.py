@@ -76,7 +76,7 @@ div[data-baseweb="input"] { min-width: 80px !important; }
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Kosik")
+        df.to_excel(writer, index=False, sheet_name="Sheet1")
     output.seek(0)
     return output.getvalue()
 
@@ -607,6 +607,15 @@ with right_col:
             st.markdown("**Množstvo**")
         with h5:
             st.markdown("")
+        # Súčet ceny pod riadkom
+        st.markdown(
+            f"""
+            <div style="font-size:13px; color:#444; margin-top:-4px; margin-bottom:6px;">
+                <b>Súčet:</b> {row['line_total']:.2f} €
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         st.divider()
 
@@ -617,24 +626,24 @@ with right_col:
                 st.markdown(
                     f"""
                     <div style="line-height:1.0;">
-                        <div style="font-weight:600;">{row['item']}</div>
-                        <div style="font-size:12px;color:gray;">{row['category']}</div>
+                        <div style="font-weight:600;">{row['Položka']}</div>
+                        <div style="font-size:12px;color:gray;">{row['Kategória']}</div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
             with b:
-                st.write(row["eqp_type"])
+                st.write(row["Model"])
 
             with c:
-                st.write(f"{row['price']:.2f}")
+                st.write(f"{row['Jednotková cena (€)']:.2f}")
 
             with d:
                 qty_key = f"cart_qty_{i}"
 
                 if qty_key not in st.session_state:
-                    st.session_state[qty_key] = int(row["qty"])
+                    st.session_state[qty_key] = int(row["Množstvo"])
 
                 new_qty = st.number_input(
                     "Množstvo",
@@ -645,7 +654,7 @@ with right_col:
                     label_visibility="collapsed"
                 )
 
-                if int(new_qty) != int(row["qty"]):
+                if int(new_qty) != int(row["Množstvo"]):
                     update_cart_qty(i, new_qty)
                     st.rerun()
 
@@ -657,7 +666,7 @@ with right_col:
 
             st.divider()
 
-        total = cdf["line_total"].sum()
+        total = cdf["Cena (€)"].sum()
         st.markdown(f"## Celkom: {total:.2f} €")
 
         btn1, btn2 = st.columns(2)
@@ -674,7 +683,7 @@ with right_col:
             st.download_button(
                 label="Stiahnuť Excel",
                 data=excel_data,
-                file_name="kosik.xlsx",
+                file_name="zoznam.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
