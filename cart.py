@@ -670,35 +670,7 @@ with right_col:
                 st.rerun()
 
         with btn2:
-            export_df = cdf.copy()
-            # Premenovanie stĺpcov do slovenčiny
-            export_df = export_df.rename(columns={
-                "item": "Položka",
-                "category": "Kategória",
-                "eqp_type": "Typ vybavenia",
-                "price": "Jednotková cena (€)",
-                "qty": "Množstvo",
-                "line_total": "Súčet (€)"
-            })
-
-            # Výpočet celkového súčtu
-            total_sum = export_df["Súčet (€)"].sum()
-
-            # Pridanie riadku CELKOM
-            total_row = {
-                "Položka": "",
-                "Kategória": "",
-                "Typ vybavenia": "",
-                "Jednotková cena (€)": "",
-                "Množstvo": "CELKOM",
-                "Súčet (€)": total_sum
-            }
-
-            export_df = pd.concat([export_df, pd.DataFrame([total_row])], ignore_index=True)
-
-            # Export
-            excel_data = to_excel_bytes(export_df)
-
+            excel_data = to_excel_bytes(cdf)
             st.download_button(
                 label="Stiahnuť Excel",
                 data=excel_data,
