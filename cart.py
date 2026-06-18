@@ -618,23 +618,23 @@ with right_col:
                     f"""
                     <div style="line-height:1.0;">
                         <div style="font-weight:600;">{row['item']}</div>
-                        <div style="font-size:12px;color:gray;">{row['category']}</div>
+                        <div style="font-size:12px;color:gray;">{row['Kategória']}</div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
             with b:
-                st.write(row["eqp_type"])
+                st.write(row["Model"])
 
             with c:
-                st.write(f"{row['price']:.2f}")
+                st.write(f"{row['Jednotková cena (€)']:.2f}")
 
             with d:
                 qty_key = f"cart_qty_{i}"
 
                 if qty_key not in st.session_state:
-                    st.session_state[qty_key] = int(row["qty"])
+                    st.session_state[qty_key] = int(row["Množstvo"])
 
                 new_qty = st.number_input(
                     "Množstvo",
@@ -645,7 +645,7 @@ with right_col:
                     label_visibility="collapsed"
                 )
 
-                if int(new_qty) != int(row["qty"]):
+                if int(new_qty) != int(row["Množstvo"]):
                     update_cart_qty(i, new_qty)
                     st.rerun()
 
@@ -655,18 +655,7 @@ with right_col:
                     clear_cart_qty_widget_state()
                     st.rerun()
 
-            # 🔥 Súčet ceny pod riadkom
-            st.markdown(
-                f"""
-                <div style="font-size:13px; color:#444; margin-top:-4px; margin-bottom:6px;">
-                    <b>Súčet:</b> {row['line_total']:.2f} €
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
             st.divider()
-
 
         total = cdf["Cena (€)"].sum()
         st.markdown(f"## Celkom: {total:.2f} €")
@@ -681,7 +670,35 @@ with right_col:
                 st.rerun()
 
         with btn2:
-            excel_data = to_excel_bytes(cdf)
+            export_df = cdf.copy()
+            # Premenovanie stĺpcov do slovenčiny
+            export_df = export_df.rename(columns={
+                "item": "Položka",
+                "category": "Kategória",
+                "eqp_type": "Typ vybavenia",
+                "price": "Jednotková cena (€)",
+                "qty": "Množstvo",
+                "line_total": "Súčet (€)"
+            })
+
+            # Výpočet celkového súčtu
+            total_sum = export_df["Súčet (€)"].sum()
+
+            # Pridanie riadku CELKOM
+            total_row = {
+                "Položka": "",
+                "Kategória": "",
+                "Typ vybavenia": "",
+                "Jednotková cena (€)": "",
+                "Množstvo": "CELKOM",
+                "Súčet (€)": total_sum
+            }
+
+            export_df = pd.concat([export_df, pd.DataFrame([total_row])], ignore_index=True)
+
+            # Export
+            excel_data = to_excel_bytes(export_df)
+
             st.download_button(
                 label="Stiahnuť Excel",
                 data=excel_data,
