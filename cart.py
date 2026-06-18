@@ -6,7 +6,7 @@ import requests
 import unicodedata
 from pathlib import Path
 
-st.set_page_config(page_title="Excel Cart", layout="wide")
+st.set_page_config(page_title="Excel Košík", layout="wide")
 
 # =========================================================
 # Session state initialization
@@ -35,6 +35,9 @@ if "category_col" not in st.session_state:
 if "price_col" not in st.session_state:
     st.session_state.price_col = None
 
+if "desc_col" not in st.session_state:
+    st.session_state.desc_col = None
+
 if "autoload_enabled" not in st.session_state:
     st.session_state.autoload_enabled = True
 
@@ -47,44 +50,21 @@ if "next_cart_id" not in st.session_state:
 # =========================================================
 st.markdown("""
 <style>
-/* Hide top header area */
-header[data-testid="stHeader"] {
-    display: none;
+header[data-testid="stHeader"] { display: none; }
+[data-testid="stToolbar"] { display: none !important; }
+.stAppDeployButton { display: none !important; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+[data-testid="stStatusWidget"] { display: none !important; }
+[data-testid="stDecoration"] { display: none !important; }
+div[data-baseweb="input"] { min-width: 80px !important; }
+.sticky-cart-container {
+    position: sticky;
+    top: 10px;
+    z-index: 50;
 }
-
-/* Hide Streamlit toolbar / top-right app controls if present */
-[data-testid="stToolbar"] {
-    display: none !important;
-}
-
-/* Hide app deploy button if present */
-.stAppDeployButton {
-    display: none !important;
-}
-
-/* Hide main hamburger menu */
-#MainMenu {
-    visibility: hidden;
-}
-
-/* Hide footer */
-footer {
-    visibility: hidden;
-}
-
-/* Sometimes the bottom-right decoration / status area is rendered in a floating container */
-[data-testid="stStatusWidget"] {
-    display: none !important;
-}
-
-/* Hide element container anchors / decoration if any */
-[data-testid="stDecoration"] {
-    display: none !important;
-}
-
-/* Make numeric inputs a bit narrower */
-div[data-baseweb="input"] {
-    min-width: 80px !important;
+.block-container {
+    overflow: visible !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -96,17 +76,13 @@ div[data-baseweb="input"] {
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Cart")
+        df.to_excel(writer, index=False, sheet_name="Kosik")
     output.seek(0)
     return output.getvalue()
 
 
 @st.cache_data(show_spinner=False)
 def download_excel_from_private_url():
-    """
-    Download Excel bytes from a private URL stored in Streamlit secrets.
-    Supports optional Authorization header.
-    """
     excel_url = st.secrets["excel_url"]
 
     headers = {}
@@ -120,9 +96,6 @@ def download_excel_from_private_url():
 
 
 def normalize_text(text):
-    """
-    Lowercase, strip spaces, and remove accents/diacritics.
-    """
     text = str(text).strip().lower()
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
@@ -130,10 +103,6 @@ def normalize_text(text):
 
 
 def guess_column(columns, candidates):
-    """
-    Try to guess a matching column from provided candidates.
-    Handles accents like: Kategória -> kategoria
-    """
     normalized = {normalize_text(c): c for c in columns}
     for cand in candidates:
         cand_norm = normalize_text(cand)
@@ -143,17 +112,11 @@ def guess_column(columns, candidates):
 
 
 def get_excel_sheets(file_bytes):
-    """
-    Return sheet names from Excel bytes.
-    """
     xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
     return xl.sheet_names
 
 
 def load_selected_sheets(file_bytes, selected_sheets):
-    """
-    Load selected sheets and append a source sheet column.
-    """
     sheets_dict = pd.read_excel(
         BytesIO(file_bytes),
         sheet_name=selected_sheets,
@@ -175,19 +138,23 @@ def load_selected_sheets(file_bytes, selected_sheets):
     return pd.concat(frames, ignore_index=True)
 
 
-def build_standard_table(df, item_col, category_col, price_col):
-    """
-    Normalize user-selected columns into:
-    item, category, price, eqp_type
-    """
-    out = df.rename(columns={
+def build_standard_table(df, item_col, category_col, price_col, desc_col=None):
+    rename_map = {
         item_col: "item",
         category_col: "category",
         price_col: "price"
-    }).copy()
+    }
 
-    required_cols = ["item", "category", "price", "__sheet__"]
-    out = out[required_cols].copy()
+    if desc_col:
+        rename_map[desc_col] = "description"
+
+    out = df.rename(columns=rename_map).copy()
+
+    required = ["item", "category", "price", "__sheet__"]
+    if desc_col:
+        required.append("description")
+
+    out = out[required].copy()
 
     out["item"] = out["item"].astype(str).str.strip()
     out["category"] = out["category"].astype(str).str.strip()
@@ -197,7 +164,6 @@ def build_standard_table(df, item_col, category_col, price_col):
     out = out[out["item"] != ""]
     out = out[out["category"] != ""]
 
-    # sheet name = equipment type
     out = out.rename(columns={"__sheet__": "eqp_type"})
     out = out.reset_index(drop=True)
 
@@ -205,9 +171,6 @@ def build_standard_table(df, item_col, category_col, price_col):
 
 
 def add_to_cart(item_row, qty):
-    """
-    Add item to cart. If the same item already exists, increase quantity.
-    """
     item_name = str(item_row["item"])
     category = str(item_row["category"])
     price = float(item_row["price"])
@@ -236,9 +199,6 @@ def add_to_cart(item_row, qty):
 
 
 def get_cart_df():
-    """
-    Convert cart from session state to DataFrame.
-    """
     if not st.session_state.cart:
         return pd.DataFrame(columns=[
             "item", "category", "eqp_type", "price", "qty", "line_total"
@@ -251,9 +211,6 @@ def get_cart_df():
 
 
 def reset_setup(keep_cart=False):
-    """
-    Reset uploaded file / mapping setup.
-    """
     st.session_state.setup_done = False
     st.session_state.file_bytes = None
     st.session_state.data = None
@@ -261,6 +218,7 @@ def reset_setup(keep_cart=False):
     st.session_state.item_col = None
     st.session_state.category_col = None
     st.session_state.price_col = None
+    st.session_state.desc_col = None
 
     if not keep_cart:
         st.session_state.cart = []
@@ -269,10 +227,6 @@ def reset_setup(keep_cart=False):
 
 
 def update_cart_qty(index, new_qty):
-    """
-    Update quantity of a cart item by index.
-    If qty < 1, remove the item.
-    """
     if int(new_qty) < 1:
         st.session_state.cart.pop(index)
         clear_cart_qty_widget_state()
@@ -281,19 +235,12 @@ def update_cart_qty(index, new_qty):
 
 
 def clear_cart_qty_widget_state():
-    """
-    Remove saved cart quantity widgets from session state.
-    Needed after removing items / clearing cart so indices stay aligned.
-    """
     for key in list(st.session_state.keys()):
         if str(key).startswith("cart_qty_"):
             del st.session_state[key]
 
 
 def load_logo(path):
-    """
-    Return base64 string for logo or None if file does not exist.
-    """
     p = Path(path)
     if not p.exists():
         return None
@@ -303,22 +250,18 @@ def load_logo(path):
 
 
 def try_autoload_default_excel():
-    """
-    Try to auto-load the private Excel file from secrets and build app data.
-    If successful, store normalized data directly into session state.
-    """
     file_bytes = download_excel_from_private_url()
     sheet_names = get_excel_sheets(file_bytes)
 
     raw_df = load_selected_sheets(file_bytes, sheet_names)
     if raw_df.empty:
-        raise ValueError("No data found in the private Excel file.")
+        raise ValueError("V súkromnom Excel súbore sa nenašli žiadne dáta.")
 
     available_cols = [c for c in raw_df.columns if c != "__sheet__"]
 
     item_guess = guess_column(
         available_cols,
-        ["polozky", "item", "name", "product", "part", "part name", "material", "description"]
+        ["polozky", "polozka", "item", "name", "product", "part", "material", "description"]
     )
     category_guess = guess_column(
         available_cols,
@@ -328,15 +271,19 @@ def try_autoload_default_excel():
         available_cols,
         ["cena", "price", "cost", "unit price (€)", "unit price", "amount", "value"]
     )
+    desc_guess = guess_column(
+        available_cols,
+        ["popis", "description", "detail", "info"]
+    )
 
     if not item_guess or not category_guess or not price_guess:
         raise ValueError(
-            f"Could not auto-detect required columns. Found columns: {available_cols}"
+            f"Nepodarilo sa automaticky nájsť potrebné stĺpce. Nájdené stĺpce: {available_cols}"
         )
 
-    data = build_standard_table(raw_df, item_guess, category_guess, price_guess)
+    data = build_standard_table(raw_df, item_guess, category_guess, price_guess, desc_guess)
     if data.empty:
-        raise ValueError("No valid rows found after normalization.")
+        raise ValueError("Po normalizácii sa nenašli žiadne platné riadky.")
 
     st.session_state.file_bytes = file_bytes
     st.session_state.data = data
@@ -344,6 +291,7 @@ def try_autoload_default_excel():
     st.session_state.item_col = item_guess
     st.session_state.category_col = category_guess
     st.session_state.price_col = price_guess
+    st.session_state.desc_col = desc_guess
     st.session_state.setup_done = True
 
 
@@ -358,41 +306,38 @@ if logo_base64:
         <div style="display:flex;align-items:center;gap:15px;">
             <img src="data:image/png;base64,{logo_base64}" width="100">
             <div>
-                <h1 style="margin-bottom:0;">PharmaGroup catalogue</h1>
-                <p style="margin-top:0;color:gray;">
-                    Upload an Excel file, map columns once, then use compact filters and a cart.
-                </p>
+                <h1 style="margin-bottom:0;">PharmaGroup katalóg</h1>
             </div>
         </div>
         """,
         unsafe_allow_html=True
     )
 else:
-    st.title("PharmaGroup catalogue")
-    st.caption("Upload an Excel file, map columns once, then use compact filters and a cart.")
+    st.title("PharmaGroup katalóg")
+    # st.caption("Nahraj Excel súbor, namapuj stĺpce a používaj filtre a košík.")
 
 
 # =========================================================
-# Setup section (visible only before confirm)
+# Setup section (auto-load + manuálne nastavenie)
 # =========================================================
 if not st.session_state.setup_done and st.session_state.autoload_enabled:
     try:
         try_autoload_default_excel()
         st.rerun()
     except Exception as e:
-        st.warning(f"Automatic private Excel load failed: {e}")
+        st.warning(f"Automatické načítanie súkromného Excel súboru zlyhalo: {e}")
 
 if not st.session_state.setup_done:
-    st.subheader("Setup")
+    st.subheader("Nastavenie")
 
     uploaded_file = st.file_uploader(
-        "Upload Excel file",
+        "Nahraj Excel súbor",
         type=["xlsx", "xls"],
-        help="Upload an Excel workbook with one or more sheets."
+        help="Nahraj Excel súbor s jedným alebo viacerými hárkami."
     )
 
     if uploaded_file is None:
-        st.info("Upload an Excel file to start.")
+        st.info("Najprv nahraj Excel súbor.")
         st.stop()
 
     file_bytes = uploaded_file.getvalue()
@@ -400,88 +345,101 @@ if not st.session_state.setup_done:
     try:
         sheet_names = get_excel_sheets(file_bytes)
     except Exception as e:
-        st.error(f"Could not read Excel file: {e}")
+        st.error(f"Nepodarilo sa načítať Excel súbor: {e}")
         st.stop()
 
     selected_sheets = st.multiselect(
-        "Sheets to include",
+        "Vyber hárky",
         options=sheet_names,
         default=sheet_names
     )
 
     if not selected_sheets:
-        st.warning("Select at least one sheet.")
+        st.warning("Vyber aspoň jeden hárok.")
         st.stop()
 
     try:
         raw_df = load_selected_sheets(file_bytes, selected_sheets)
     except Exception as e:
-        st.error(f"Failed to load selected sheets: {e}")
+        st.error(f"Chyba pri načítaní hárkov: {e}")
         st.stop()
 
     if raw_df.empty:
-        st.warning("No data found in selected sheets.")
+        st.warning("V zvolených hárkoch sa nenašli žiadne dáta.")
         st.stop()
 
     available_cols = [c for c in raw_df.columns if c != "__sheet__"]
 
     if not available_cols:
-        st.error("No usable columns found in selected sheets.")
+        st.error("V zvolených hárkoch sa nenašli použiteľné stĺpce.")
         st.stop()
 
-    st.markdown("### Map your columns")
+    st.markdown("### Namapuj stĺpce")
 
     item_guess = guess_column(
         available_cols,
-        ["item", "name", "product", "part", "part name", "material", "description"]
+        ["polozka", "polozky", "item", "name", "product", "part", "part name", "material", "description"]
     )
     category_guess = guess_column(
         available_cols,
-        ["category", "group", "type", "family", "class"]
+        ["kategoria", "category", "group", "type", "family", "class"]
     )
     price_guess = guess_column(
         available_cols,
-        ["price", "cost", "unit price", "unit price (€)", "amount", "value"]
+        ["cena", "price", "cost", "unit price", "unit price (€)", "amount", "value"]
+    )
+    desc_guess = guess_column(
+        available_cols,
+        ["popis", "description", "detail", "info"]
     )
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
 
     with c1:
         item_col = st.selectbox(
-            "Item column",
+            "Stĺpec položky",
             options=available_cols,
             index=available_cols.index(item_guess) if item_guess in available_cols else 0,
-            help="Column containing item / product / part name."
+            help="Stĺpec s názvom položky / produktu / dielu."
         )
 
     with c2:
         category_col = st.selectbox(
-            "Category column",
+            "Stĺpec kategórie",
             options=available_cols,
             index=available_cols.index(category_guess) if category_guess in available_cols else 0,
-            help="Column containing category / group / family."
+            help="Stĺpec s kategóriou / skupinou / typom."
         )
 
     with c3:
         price_col = st.selectbox(
-            "Price column",
+            "Stĺpec ceny",
             options=available_cols,
             index=available_cols.index(price_guess) if price_guess in available_cols else 0,
-            help="Column containing numeric item price."
+            help="Stĺpec s číselnou cenou položky."
         )
 
-    with st.expander("Preview raw uploaded data"):
+    with c4:
+        desc_col = st.selectbox(
+            "Stĺpec popisu (voliteľné)",
+            options=["(žiadny)"] + available_cols,
+            index=(available_cols.index(desc_guess) + 1) if desc_guess in available_cols else 0,
+            help="Stĺpec s textovým popisom položky."
+        )
+
+    with st.expander("Náhľad nahraných dát"):
         st.dataframe(raw_df, use_container_width=True)
 
-    if st.button("Confirm setup", type="primary"):
+    if st.button("Potvrdiť nastavenie", type="primary"):
         try:
-            data = build_standard_table(raw_df, item_col, category_col, price_col)
+            desc_final = None if desc_col == "(žiadny)" else desc_col
+            data = build_standard_table(raw_df, item_col, category_col, price_col, desc_final)
         except Exception as e:
-            st.error(f"Column mapping failed: {e}")
+            st.error(f"Mapovanie stĺpcov zlyhalo: {e}")
             st.stop()
 
         if data.empty:
-            st.warning("No valid rows after applying selected columns.")
+            st.warning("Po aplikovaní zvolených stĺpcov sa nenašli žiadne platné riadky.")
             st.stop()
 
         st.session_state.file_bytes = file_bytes
@@ -490,6 +448,7 @@ if not st.session_state.setup_done:
         st.session_state.item_col = item_col
         st.session_state.category_col = category_col
         st.session_state.price_col = price_col
+        st.session_state.desc_col = desc_final
         st.session_state.setup_done = True
 
         st.rerun()
@@ -503,28 +462,28 @@ if not st.session_state.setup_done:
 data = st.session_state.data
 
 if data is None or data.empty:
-    st.error("No data available. Please reset and load the file again.")
-    if st.button("Reset"):
-        reset_setup(keep_cart=False)
-        st.rerun()
-    st.stop()
+    st.error("Dáta nie sú dostupné. Resetuj a nahraj súbor znova.")
+#     if st.button("Resetovať"):
+#         reset_setup(keep_cart=False)
+#         st.rerun()
+#     st.stop()
 
 
-# Top compact controls
-top_left, top_mid, top_right = st.columns([3, 2, 1])
+# # Top compact controls
+# top_left, top_mid, top_right = st.columns([3, 2, 1])
 
-with top_left:
-    st.success("Excel loaded")
+# with top_left:
+#     st.success("Excel načítaný")
 
-with top_mid:
-    file_info = f"Sheets: {', '.join(st.session_state.selected_sheets)}"
-    st.caption(file_info)
+# with top_mid:
+#     file_info = f"Hárky: {', '.join(st.session_state.selected_sheets)}"
+#     st.caption(file_info)
 
-with top_right:
-    if st.button("Change file / remap"):
-        reset_setup(keep_cart=False)
-        st.session_state.autoload_enabled = False
-        st.rerun()
+# with top_right:
+#     if st.button("Zmeniť súbor / mapovanie"):
+#         reset_setup(keep_cart=False)
+#         st.session_state.autoload_enabled = False
+#         st.rerun()
 
 
 # =========================================================
@@ -535,21 +494,21 @@ filter1, filter2, filter3 = st.columns([2, 2, 3])
 filtered = data.copy()
 
 with filter1:
-    eqp_options = ["All"] + sorted(data["eqp_type"].dropna().unique().tolist())
-    selected_eqp = st.selectbox("Equipment type", eqp_options)
+    eqp_options = ["Všetko"] + sorted(data["eqp_type"].dropna().unique().tolist())
+    selected_eqp = st.selectbox("Typ vybavenia", eqp_options)
 
-if selected_eqp != "All":
+if selected_eqp != "Všetko":
     filtered = filtered[filtered["eqp_type"] == selected_eqp].copy()
 
 with filter2:
-    category_options = ["All"] + sorted(filtered["category"].dropna().unique().tolist())
-    selected_category = st.selectbox("Category", category_options)
+    category_options = ["Všetko"] + sorted(filtered["category"].dropna().unique().tolist())
+    selected_category = st.selectbox("Kategória", category_options)
 
-if selected_category != "All":
+if selected_category != "Všetko":
     filtered = filtered[filtered["category"] == selected_category].copy()
 
 with filter3:
-    search_text = st.text_input("Search item")
+    search_text = st.text_input("Hľadať položku")
 
 if search_text:
     filtered = filtered[
@@ -568,24 +527,25 @@ left_col, right_col = st.columns([2.5, 1.5])
 # Available items
 # ---------------------------------------------------------
 with left_col:
-    st.markdown("## Available items")
+    st.markdown("## Dostupné položky")
 
     if filtered.empty:
-        st.warning("No items match the current filters.")
+        st.warning("Žiadne položky nevyhovujú aktuálnym filtrom.")
     else:
         h1, h2, h3, h4, h5 = st.columns([4, 2, 2, 1.3, 1.2])
         with h1:
-            st.markdown("**Item**")
+            st.markdown("**Položka**")
         with h2:
-            st.markdown("**Equipment type**")
+            st.markdown("**Typ vybavenia**")
         with h3:
-            st.markdown("**Category**")
+            st.markdown("**Kategória**")
         with h4:
-            st.markdown("**Unit price (€)**")
+            st.markdown("**Cena (€)**")
 
         st.divider()
 
         for idx, row in filtered.iterrows():
+            # Hlavný riadok – názov, typ, kategória, cena, tlačidlo
             c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 1.3, 1.2])
 
             with c1:
@@ -601,31 +561,50 @@ with left_col:
                 st.write(f"{row['price']:.2f}")
 
             with c5:
-                if st.button("Add", key=f"add_{idx}", use_container_width=True):
+                if st.button("Pridať", key=f"add_{idx}", use_container_width=True):
                     add_to_cart(row, 1)
                     st.rerun()
 
+            # Druhý riadok – popis cez prvé dva stĺpce
+            if "description" in row and pd.notna(row["description"]):
+                d1, d2 = st.columns([6, 5])  # 4+2 = 6, zvyšok necháme prázdny
+                with d1:
+                    st.markdown(
+                        f"""
+                        <div style="font-size:13px; color:gray; margin-top:-4px; margin-bottom:6px;">
+                            {row['description']}
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+            # Oddelenie riadkov
+            st.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
+
+
 
 # ---------------------------------------------------------
-# Cart
+# Cart (sticky in right column)
 # ---------------------------------------------------------
 with right_col:
-    st.markdown("## Cart")
+    st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
+
+    st.markdown("## Košík")
 
     cdf = get_cart_df()
 
     if cdf.empty:
-        st.info("Cart is empty.")
+        st.info("Košík je prázdny.")
     else:
         h1, h2, h3, h4, h5 = st.columns([3, 1.5, 1.5, 1.2, 1.2])
         with h1:
-            st.markdown("**Item**")
+            st.markdown("**Položka**")
         with h2:
-            st.markdown("**Equipment type**")
+            st.markdown("**Typ vybavenia**")
         with h3:
-            st.markdown("**Price (€)**")
+            st.markdown("**Cena (€)**")
         with h4:
-            st.markdown("**Quantity**")
+            st.markdown("**Množstvo**")
         with h5:
             st.markdown("")
 
@@ -658,7 +637,7 @@ with right_col:
                     st.session_state[qty_key] = int(row["qty"])
 
                 new_qty = st.number_input(
-                    "Quantity",
+                    "Množstvo",
                     min_value=1,
                     max_value=1000,
                     step=1,
@@ -671,7 +650,7 @@ with right_col:
                     st.rerun()
 
             with e:
-                if st.button("Remove", key=f"remove_{i}", use_container_width=True):
+                if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
                     st.session_state.cart.pop(i)
                     clear_cart_qty_widget_state()
                     st.rerun()
@@ -679,12 +658,12 @@ with right_col:
             st.divider()
 
         total = cdf["line_total"].sum()
-        st.markdown(f"## Total: {total:.2f}")
+        st.markdown(f"## Celkom: {total:.2f} €")
 
         btn1, btn2 = st.columns(2)
 
         with btn1:
-            if st.button("Clear cart", use_container_width=True):
+            if st.button("Vymazať košík", use_container_width=True):
                 st.session_state.cart = []
                 st.session_state.next_cart_id = 1
                 clear_cart_qty_widget_state()
@@ -693,16 +672,19 @@ with right_col:
         with btn2:
             excel_data = to_excel_bytes(cdf)
             st.download_button(
-                label="Download Excel",
+                label="Stiahnuť Excel",
                 data=excel_data,
-                file_name="cart.xlsx",
+                file_name="kosik.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 # =========================================================
 # Optional preview
 # =========================================================
-with st.expander("Preview normalized data used by app"):
-    st.dataframe(data, use_container_width=True)
+# with st.expander("Náhľad normalizovaných dát používaných aplikáciou"):
+#     st.dataframe(data, use_container_width=True)
