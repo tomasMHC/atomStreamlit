@@ -693,54 +693,54 @@ with right_col:
         total_w_dph = total * 1.23
 
         st.markdown(
-            f"""
-            <div style="
-                border:1px solid #e5e7eb;
-                border-radius:14px;
-                padding:16px 18px;
-                background:linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
-                margin-top:10px;
-                margin-bottom:14px;
-                box-shadow:0 1px 3px rgba(0,0,0,0.05);
-            ">
-                <div style="
-                    display:flex;
-                    justify-content:space-between;
-                    align-items:center;
-                    font-size:15px;
-                    color:#374151;
-                    margin-bottom:8px;
-                ">
-                    <span>Celkom bez DPH</span>
-                    <span style="font-weight:600;">{total:.2f} €</span>
-                </div>
+    f"""
+<div style="
+border:1px solid #e5e7eb;
+border-radius:14px;
+padding:16px 18px;
+background:linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+margin-top:10px;
+margin-bottom:14px;
+box-shadow:0 1px 3px rgba(0,0,0,0.05);
+">
+    <div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:15px;
+    color:#374151;
+    margin-bottom:8px;
+    ">
+        <span>Celkom bez DPH</span>
+        <span style="font-weight:600;">{total:.2f} €</span>
+    </div>
 
-                <div style="height:1px; background:#e5e7eb; margin:10px 0;"></div>
+    <div style="height:1px; background:#e5e7eb; margin:10px 0;"></div>
 
-                <div style="
-                    display:flex;
-                    justify-content:space-between;
-                    align-items:center;
-                ">
-                    <span style="
-                        font-size:18px;
-                        font-weight:700;
-                        color:#111827;
-                    ">
-                        Celkom s DPH
-                    </span>
-                    <span style="
-                        font-size:26px;
-                        font-weight:800;
-                        color:#0f766e;
-                    ">
-                        {total_w_dph:.2f} €
-                    </span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    <div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    ">
+        <span style="
+        font-size:18px;
+        font-weight:700;
+        color:#111827;
+        ">
+            Celkom s DPH
+        </span>
+        <span style="
+        font-size:26px;
+        font-weight:800;
+        color:#0f766e;
+        ">
+            {total_w_dph:.2f} €
+        </span>
+    </div>
+</div>
+""",
+    unsafe_allow_html=True
+)
 
         btn1, btn2 = st.columns(2)
 
