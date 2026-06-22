@@ -596,7 +596,8 @@ with right_col:
     if cdf.empty:
         st.info("Zoznam položiek je prázdny.")
     else:
-        h1, h2, h3, h4, h5 = st.columns([3, 1.5, 1.5, 1.2, 1.2])
+        # Header
+        h1, h2, h3, h4, h5, h6 = st.columns([3.0, 1.4, 1.4, 1.2, 1.4, 1.2])
         with h1:
             st.markdown("**Položka**")
         with h2:
@@ -606,19 +607,22 @@ with right_col:
         with h4:
             st.markdown("**Množstvo**")
         with h5:
+            st.markdown("**Spolu (€)**")
+        with h6:
             st.markdown("")
 
         st.divider()
 
+        # Cart rows
         for i, row in cdf.iterrows():
-            a, b, c, d, e = st.columns([3, 1.5, 1.5, 1.2, 1.2])
+            a, b, c, d, e, f = st.columns([3.0, 1.4, 1.4, 1.2, 1.4, 1.2])
 
             with a:
                 st.markdown(
                     f"""
-                    <div style="line-height:1.0;">
+                    <div style="line-height:1.1;">
                         <div style="font-weight:600;">{row['item']}</div>
-                        <div style="font-size:12px;color:gray;">{row['category']}</div>
+                        <div style="font-size:12px; color:gray;">{row['category']}</div>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -628,7 +632,7 @@ with right_col:
                 st.write(row["eqp_type"])
 
             with c:
-                st.write(f"{row['price']:.2f}")
+                st.write(f"{row['price']:.2f} €")
 
             with d:
                 qty_key = f"cart_qty_{i}"
@@ -650,28 +654,67 @@ with right_col:
                     st.rerun()
 
             with e:
+                st.markdown(
+                    f"""
+                    <div style="text-align:right; font-weight:600; padding-top:6px;">
+                        {row['line_total']:.2f} €
+                    </div>
+                    <div style="text-align:right; font-size:11px; color:gray;">
+                        spolu
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            with f:
                 if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
                     st.session_state.cart.pop(i)
                     clear_cart_qty_widget_state()
                     st.rerun()
 
-            # Súčet ceny pod riadkom
-            # st.markdown(
-            #     f"""
-            #     <div style="font-size:13px; color:#444; margin-top:-4px; margin-bottom:6px;">
-            #         <b>Súčet:</b> {row['line_total']:.2f} €
-            #     </div>
-            #     """,
-            #     unsafe_allow_html=True
-            # )
+            st.divider()
+
+        # Totals
+        total = cdf["line_total"].sum()
+        total_w_dph = total * 1.23
+
+        # Robust Streamlit-native summary box (no HTML leaking)
+        with st.container(border=True):
+            r1c1, r1c2 = st.columns([2.2, 1])
+            with r1c1:
+                st.markdown("Celkom bez DPH")
+            with r1c2:
+                st.markdown(
+                    f"<div style='text-align:right; font-weight:600;'>{total:.2f} €</div>",
+                    unsafe_allow_html=True
+                )
 
             st.divider()
 
-        total = cdf["line_total"].sum()
-        st.markdown(f"## Celkom: {total:.2f} €")
-        total_w_dph = cdf["line_total"].sum()*1.23
-        st.markdown(f"## Celkom s DPH: {total_w_dph:.2f} €")
+            r2c1, r2c2 = st.columns([2.2, 1])
+            with r2c1:
+                st.markdown(
+                    "<div style='font-size:18px; font-weight:700;'>Celkom s DPH</div>",
+                    unsafe_allow_html=True
+                )
+            with r2c2:
+                st.markdown(
+                    f"""
+                    <div style="
+                        text-align:right;
+                        font-size:26px;
+                        font-weight:800;
+                        color:#0f766e;
+                        white-space:nowrap;
+                        line-height:1.2;
+                    ">
+                        {total_w_dph:.2f} €
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
+        # Buttons
         btn1, btn2 = st.columns(2)
 
         with btn1:
@@ -682,7 +725,7 @@ with right_col:
                 st.rerun()
 
         with btn2:
-            # Export do Excelu – s riadkom CELKOM
+            # Export do Excelu – s riadkami CELKOM
             export_df = cdf.copy()
             export_df = export_df.rename(columns={
                 "item": "Položka",
@@ -693,19 +736,26 @@ with right_col:
                 "line_total": "Celkom bez DPH (€)"
             })
 
-            total_row = {
-                "Položka": "",
-                "Kategória": "",
-                "Typ vybavenia": "",
-                "Cena bez DPH (€)": "",
-                "Množstvo": "Celkom bez DPH",
-                "Celkom (€)": export_df["Celkom bez DPH (€)"].sum(),
-                "Množstvo": "Celkom s DPH",
-                "Celkom (€)": export_df["Celkom bez DPH (€)"].sum()*1.23
+            total_rows = pd.DataFrame([
+                {
+                    "Položka": "",
+                    "Kategória": "",
+                    "Typ vybavenia": "",
+                    "Cena bez DPH (€)": "",
+                    "Množstvo": "Celkom bez DPH",
+                    "Celkom bez DPH (€)": round(total, 2)
+                },
+                {
+                    "Položka": "",
+                    "Kategória": "",
+                    "Typ vybavenia": "",
+                    "Cena bez DPH (€)": "",
+                    "Množstvo": "Celkom s DPH",
+                    "Celkom bez DPH (€)": round(total_w_dph, 2)
+                }
+            ])
 
-            }
-
-            export_df = pd.concat([export_df, pd.DataFrame([total_row])], ignore_index=True)
+            export_df = pd.concat([export_df, total_rows], ignore_index=True)
 
             excel_data = to_excel_bytes(export_df)
 
