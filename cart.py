@@ -700,7 +700,7 @@ with right_col:
                 "Cena bez DPH (€)": "",
                 "Množstvo": "CELKOM",
                 "Celkom bez DPH (€)": export_df["Celkom bez DPH (€)"].sum(),
-                "Celkom s DPH (€)": export_df["Celkom s DPH (€)"].sum()*1.23
+                "Celkom s DPH (€)": export_df["Celkom bez DPH (€)"].sum()*1.23
 
             }
 
