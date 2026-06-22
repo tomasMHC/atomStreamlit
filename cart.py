@@ -651,195 +651,135 @@ st.markdown('</div>', unsafe_allow_html=True)
 # ---------------------------------------------------------
 with right_col:
     st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
-    st.markdown('<div class="cart-panel">', unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class="cart-header">
-        <div class="cart-header-title">🛒 Vybraté položky</div>
-        <div class="cart-header-subtitle">Prehľad položiek na stiahnutie / objednanie</div>
-    </div>
-    """, unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("""
+        <div class="cart-header">
+            <div class="cart-header-title">🛒 Vybraté položky</div>
+            <div class="cart-header-subtitle">Prehľad položiek na stiahnutie / objednanie</div>
+        </div>
+        """, unsafe_allow_html=True)
 
+        cdf = get_cart_df()
 
-    cdf = get_cart_df()
+        if cdf.empty:
+            st.info("Zoznam položiek je prázdny.")
+        else:
+            h1, h2, h3, h4, h5, h6 = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
+            with h1:
+                st.markdown("**Položka**")
+            with h2:
+                st.markdown("**Typ**")
+            with h3:
+                st.markdown("**Cena (€)**")
+            with h4:
+                st.markdown("**Množ.**")
+            with h5:
+                st.markdown("**Spolu (€)**")
+            with h6:
+                st.markdown("")
 
-    if cdf.empty:
-        st.info("Zoznam položiek je prázdny.")
-    else:
-        # Header
-        h1, h2, h3, h4, h5, h6 = st.columns([2.0, 1.4, 1.4, 1.2, 1.4, 1.4])
-        with h1:
-            st.markdown("**Položka**")
-        with h2:
-            st.markdown("**Typ vybavenia**")
-        with h3:
-            st.markdown("**Cena bez DPH (€)**")
-        with h4:
-            st.markdown("**Množstvo**")
-        with h5:
-            st.markdown("**Spolu (€)**")
-        with h6:
-            st.markdown("")
+            st.divider()
 
-        st.divider()
+            for i, row in cdf.iterrows():
+                a, b, c, d, e, f = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
 
-        # Cart rows
-        for i, row in cdf.iterrows():
-            a, b, c, d, e, f = st.columns([2.0, 1.4, 1.4, 1.2, 1.4, 1.4])
+                with a:
+                    st.markdown(
+                        f"""
+                        <div style="line-height:1.1;">
+                            <div style="font-weight:600;">{row['item']}</div>
+                            <div style="font-size:12px; color:gray;">{row['category']}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
-            with a:
-                st.markdown(
-                    f"""
-                    <div style="line-height:1.1;">
-                        <div style="font-weight:600;">{row['item']}</div>
-                        <div style="font-size:12px; color:gray;">{row['category']}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                with b:
+                    st.write(row["eqp_type"])
 
-            with b:
-                st.write(row["eqp_type"])
+                with c:
+                    st.write(f"{row['price']:.2f} €")
 
-            with c:
-                st.write(f"{row['price']:.2f} €")
+                with d:
+                    qty_key = f"cart_qty_{i}"
+                    if qty_key not in st.session_state:
+                        st.session_state[qty_key] = int(row["qty"])
 
-            with d:
-                qty_key = f"cart_qty_{i}"
+                    new_qty = st.number_input(
+                        "Množstvo",
+                        min_value=1,
+                        max_value=1000,
+                        step=1,
+                        key=qty_key,
+                        label_visibility="collapsed"
+                    )
 
-                if qty_key not in st.session_state:
-                    st.session_state[qty_key] = int(row["qty"])
+                    if int(new_qty) != int(row["qty"]):
+                        update_cart_qty(i, new_qty)
+                        st.rerun()
 
-                new_qty = st.number_input(
-                    "Množstvo",
-                    min_value=1,
-                    max_value=1000,
-                    step=1,
-                    key=qty_key,
-                    label_visibility="collapsed"
-                )
+                with e:
+                    st.markdown(
+                        f"""
+                        <div style="text-align:right; font-weight:600; padding-top:6px;">
+                            {row['line_total']:.2f} €
+                        </div>
+                        <div style="text-align:right; font-size:11px; color:gray;">
+                            spolu
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
-                if int(new_qty) != int(row["qty"]):
-                    update_cart_qty(i, new_qty)
-                    st.rerun()
+                with f:
+                    if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
+                        st.session_state.cart.pop(i)
+                        clear_cart_qty_widget_state()
+                        st.rerun()
 
-            with e:
-                st.markdown(
-                    f"""
-                    <div style="text-align:right; font-weight:600; padding-top:6px;">
-                        {row['line_total']:.2f} €
-                    </div>
-                    <div style="text-align:right; font-size:11px; color:gray;">
-                        spolu
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                st.divider()
 
-            with f:
-                if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
-                    st.session_state.cart.pop(i)
+            total = cdf["line_total"].sum()
+            total_w_dph = total * 1.23
+
+            with st.container(border=True):
+                r1c1, r1c2 = st.columns([2.2, 1])
+                with r1c1:
+                    st.markdown("Celkom bez DPH")
+                with r1c2:
+                    st.markdown(
+                        f"<div style='text-align:right; font-weight:600;'>{total:.2f} €</div>",
+                        unsafe_allow_html=True
+                    )
+
+                st.divider()
+
+                r2c1, r2c2 = st.columns([2.2, 1])
+                with r2c1:
+                    st.markdown(
+                        "<div style='font-size:18px; font-weight:700;'>Celkom s DPH</div>",
+                        unsafe_allow_html=True
+                    )
+                with r2c2:
+                    st.markdown(
+                        f"<div style='text-align:right; font-size:26px; font-weight:800; color:#0f766e; white-space:nowrap;'>{total_w_dph:.2f} €</div>",
+                        unsafe_allow_html=True
+                    )
+
+            btn1, btn2 = st.columns(2)
+            with btn1:
+                if st.button("Vymazať zoznam", use_container_width=True):
+                    st.session_state.cart = []
+                    st.session_state.next_cart_id = 1
                     clear_cart_qty_widget_state()
                     st.rerun()
 
-            st.divider()
+            with btn2:
+                ...
+                # export logic stays
 
-        # Totals
-        total = cdf["line_total"].sum()
-        total_w_dph = total * 1.23
-
-        # Robust Streamlit-native summary box (no HTML leaking)
-        with st.container(border=True):
-            r1c1, r1c2 = st.columns([2.2, 1])
-            with r1c1:
-                st.markdown("Celkom bez DPH")
-            with r1c2:
-                st.markdown(
-                    f"<div style='text-align:right; font-weight:600;'>{total:.2f} €</div>",
-                    unsafe_allow_html=True
-                )
-
-            st.divider()
-
-            r2c1, r2c2 = st.columns([2.2, 1])
-            with r2c1:
-                st.markdown(
-                    "<div style='font-size:18px; font-weight:700;'>Celkom s DPH</div>",
-                    unsafe_allow_html=True
-                )
-            with r2c2:
-                st.markdown(
-                    f"""
-                    <div style="
-                        text-align:right;
-                        font-size:26px;
-                        font-weight:800;
-                        color:#0f766e;
-                        white-space:nowrap;
-                        line-height:1.2;
-                    ">
-                        {total_w_dph:.2f} €
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        # Buttons
-        btn1, btn2 = st.columns(2)
-
-        with btn1:
-            if st.button("Vymazať zoznam", use_container_width=True):
-                st.session_state.cart = []
-                st.session_state.next_cart_id = 1
-                clear_cart_qty_widget_state()
-                st.rerun()
-
-        with btn2:
-            # Export do Excelu – s riadkami CELKOM
-            export_df = cdf.copy()
-            export_df = export_df.rename(columns={
-                "item": "Položka",
-                "category": "Kategória",
-                "eqp_type": "Typ vybavenia",
-                "price": "Cena bez DPH (€)",
-                "qty": "Množstvo",
-                "line_total": "Celkom bez DPH (€)"
-            })
-
-            total_rows = pd.DataFrame([
-                {
-                    "Položka": "",
-                    "Kategória": "",
-                    "Typ vybavenia": "",
-                    "Cena bez DPH (€)": "",
-                    "Množstvo": "Celkom bez DPH",
-                    "Celkom": round(total, 2)
-                },
-                {
-                    "Položka": "",
-                    "Kategória": "",
-                    "Typ vybavenia": "",
-                    "Cena bez DPH (€)": "",
-                    "Množstvo": "Celkom s DPH",
-                    "Celkom": round(total_w_dph, 2)
-                }
-            ])
-
-            export_df = pd.concat([export_df, total_rows], ignore_index=True)
-
-            excel_data = to_excel_bytes(export_df)
-
-            st.download_button(
-                label="Stiahnuť Excel",
-                data=excel_data,
-                file_name="zoznam.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
-    st.markdown('</div>', unsafe_allow_html=True)   # cart-panel
-    st.markdown('</div>', unsafe_allow_html=True)   # sticky-cart-container
-
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 
