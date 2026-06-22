@@ -6,7 +6,7 @@ import requests
 import unicodedata
 from pathlib import Path
 
-st.set_page_config(page_title="PharmaGroup katalóg")
+st.set_page_config(page_title="PharmaGroup katalóg", layout="wide")
 
 # =========================================================
 # Session state initialization
