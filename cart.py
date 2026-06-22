@@ -6,7 +6,7 @@ import requests
 import unicodedata
 from pathlib import Path
 
-st.set_page_config(page_title="Excel Košík", layout="wide")
+st.set_page_config(page_title="PharmaGroup katalóg", layout="None")
 
 # =========================================================
 # Session state initialization
@@ -597,7 +597,7 @@ with right_col:
         st.info("Zoznam položiek je prázdny.")
     else:
         # Header
-        h1, h2, h3, h4, h5, h6 = st.columns([3.0, 1.4, 1.4, 1.2, 1.4, 1.2])
+        h1, h2, h3, h4, h5, h6 = st.columns([2.0, 1.4, 1.4, 1.2, 1.4, 1.4])
         with h1:
             st.markdown("**Položka**")
         with h2:
@@ -615,7 +615,7 @@ with right_col:
 
         # Cart rows
         for i, row in cdf.iterrows():
-            a, b, c, d, e, f = st.columns([3.0, 1.4, 1.4, 1.2, 1.4, 1.2])
+            a, b, c, d, e, f = st.columns([2.0, 1.4, 1.4, 1.2, 1.4, 1.4])
 
             with a:
                 st.markdown(
@@ -743,7 +743,7 @@ with right_col:
                     "Typ vybavenia": "",
                     "Cena bez DPH (€)": "",
                     "Množstvo": "Celkom bez DPH",
-                    "Celkom bez DPH (€)": round(total, 2)
+                    "Celkom": round(total, 2)
                 },
                 {
                     "Položka": "",
@@ -751,7 +751,7 @@ with right_col:
                     "Typ vybavenia": "",
                     "Cena bez DPH (€)": "",
                     "Množstvo": "Celkom s DPH",
-                    "Celkom bez DPH (€)": round(total_w_dph, 2)
+                    "Celkom": round(total_w_dph, 2)
                 }
             ])
 
