@@ -57,14 +57,76 @@ header[data-testid="stHeader"] { display: none; }
 footer { visibility: hidden; }
 [data-testid="stStatusWidget"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
+
 div[data-baseweb="input"] { min-width: 80px !important; }
-.sticky-cart-container {
-    position: sticky;
-    top: 10px;
-    z-index: 50;
-}
+
 .block-container {
     overflow: visible !important;
+    padding-top: 1.2rem;
+    padding-bottom: 1.2rem;
+}
+
+/* sticky cart */
+.sticky-cart-container {
+    position: sticky;
+    top: 12px;
+    z-index: 50;
+}
+
+/* LEFT side section */
+.items-panel {
+    padding-right: 10px;
+}
+
+/* RIGHT side cart card */
+.cart-panel {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    padding: 18px 18px 16px 18px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+/* cart header strip */
+.cart-header {
+    background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%);
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+}
+
+.cart-header-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.cart-header-subtitle {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+/* subtle separator feel between columns on desktop */
+@media (min-width: 900px) {
+    .cart-panel {
+        margin-left: 10px;
+    }
+}
+
+/* mobile */
+@media (max-width: 768px) {
+    .cart-panel {
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 14px;
+    }
+
+    .cart-header-title {
+        font-size: 18px;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -527,6 +589,7 @@ left_col, right_col = st.columns([2.4, 1.6], gap = "large")
 # Available items
 # ---------------------------------------------------------
 with left_col:
+    st.markdown('<div class="items-panel">', unsafe_allow_html=True)
     st.markdown("## Dostupné položky")
 
     if filtered.empty:
@@ -580,7 +643,7 @@ with left_col:
 
             # Oddelenie riadkov
             st.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
-
+st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------
@@ -588,8 +651,15 @@ with left_col:
 # ---------------------------------------------------------
 with right_col:
     st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
+    st.markdown('<div class="cart-panel">', unsafe_allow_html=True)
 
-    st.markdown("## Vybraté položky")
+    st.markdown("""
+    <div class="cart-header">
+        <div class="cart-header-title">🛒 Vybraté položky</div>
+        <div class="cart-header-subtitle">Prehľad položiek na stiahnutie / objednanie</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
     cdf = get_cart_df()
 
