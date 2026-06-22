@@ -521,7 +521,7 @@ filtered = filtered.sort_values(["category", "item"]).reset_index(drop=True)
 # =========================================================
 # Main layout
 # =========================================================
-left_col, right_col = st.columns([2.3, 1.7])
+left_col, right_col = st.columns([2.4, 1.6], gap = "large")
 
 # ---------------------------------------------------------
 # Available items
@@ -589,7 +589,7 @@ with left_col:
 with right_col:
     st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
 
-    st.markdown("## Zoznam položiek")
+    st.markdown("## Vybraté položky")
 
     cdf = get_cart_df()
 
