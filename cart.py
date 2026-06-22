@@ -540,7 +540,7 @@ with left_col:
         with h3:
             st.markdown("**Kategória**")
         with h4:
-            st.markdown("**Cena (€)**")
+            st.markdown("**Cena bez DPH (€)**")
 
         st.divider()
 
@@ -602,7 +602,7 @@ with right_col:
         with h2:
             st.markdown("**Typ vybavenia**")
         with h3:
-            st.markdown("**Cena (€)**")
+            st.markdown("**Cena bez DPH (€)**")
         with h4:
             st.markdown("**Množstvo**")
         with h5:
@@ -656,19 +656,21 @@ with right_col:
                     st.rerun()
 
             # Súčet ceny pod riadkom
-            st.markdown(
-                f"""
-                <div style="font-size:13px; color:#444; margin-top:-4px; margin-bottom:6px;">
-                    <b>Súčet:</b> {row['line_total']:.2f} €
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            # st.markdown(
+            #     f"""
+            #     <div style="font-size:13px; color:#444; margin-top:-4px; margin-bottom:6px;">
+            #         <b>Súčet:</b> {row['line_total']:.2f} €
+            #     </div>
+            #     """,
+            #     unsafe_allow_html=True
+            # )
 
             st.divider()
 
         total = cdf["line_total"].sum()
         st.markdown(f"## Celkom: {total:.2f} €")
+        total_w_dph = cdf["line_total"].sum()*1.23
+        st.markdown(f"## Celkom s DPH: {total:.2f} €")
 
         btn1, btn2 = st.columns(2)
 
@@ -686,18 +688,20 @@ with right_col:
                 "item": "Položka",
                 "category": "Kategória",
                 "eqp_type": "Typ vybavenia",
-                "price": "Jednotková cena (€)",
+                "price": "Cena bez DPH (€)",
                 "qty": "Množstvo",
-                "line_total": "Súčet (€)"
+                "line_total": "Celkom bez DPH (€)"
             })
 
             total_row = {
                 "Položka": "",
                 "Kategória": "",
                 "Typ vybavenia": "",
-                "Jednotková cena (€)": "",
+                "Cena bez DPH (€)": "",
                 "Množstvo": "CELKOM",
-                "Súčet (€)": export_df["Súčet (€)"].sum()
+                "Celkom bez DPH (€)": export_df["Celkom bez DPH (€)"].sum(),
+                "Celkom s DPH (€)": export_df["Celkom s DPH (€)"].sum()*1.23
+
             }
 
             export_df = pd.concat([export_df, pd.DataFrame([total_row])], ignore_index=True)
