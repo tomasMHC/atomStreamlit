@@ -837,7 +837,9 @@ with right_col:
                 use_container_width=True
             )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)   # cart-panel
+    st.markdown('</div>', unsafe_allow_html=True)   # sticky-cart-container
+
 
 
 
