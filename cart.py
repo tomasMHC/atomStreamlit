@@ -596,7 +596,7 @@ with right_col:
     if cdf.empty:
         st.info("Zoznam položiek je prázdny.")
     else:
-        h1, h2, h3, h4, h5 = st.columns([3, 1.5, 1.5, 1.2, 1.2])
+        h1, h2, h3, h4, h5, h6 = st.columns([3.2, 1.4, 1.3, 1.4, 1.3, 1.2])
         with h1:
             st.markdown("**Položka**")
         with h2:
@@ -606,6 +606,8 @@ with right_col:
         with h4:
             st.markdown("**Množstvo**")
         with h5:
+            st.markdown("**Spolu (€)**")
+        with h6:
             st.markdown("")
 
         st.divider()
@@ -690,7 +692,6 @@ with right_col:
         total = cdf["line_total"].sum()
         total_w_dph = total * 1.23
 
-        # ===== Súhrnný box =====
         st.markdown(
             f"""
             <div style="
@@ -792,7 +793,7 @@ with right_col:
                 use_container_width=True
             )
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 
