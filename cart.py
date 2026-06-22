@@ -776,8 +776,47 @@ with right_col:
                     st.rerun()
 
             with btn2:
-                ...
-                # export logic stays
+                # Export do Excelu – s riadkami CELKOM
+                export_df = cdf.copy()
+                export_df = export_df.rename(columns={
+                    "item": "Položka",
+                    "category": "Kategória",
+                    "eqp_type": "Typ vybavenia",
+                    "price": "Cena bez DPH (€)",
+                    "qty": "Množstvo",
+                    "line_total": "Celkom bez DPH (€)"
+                })
+
+                total_rows = pd.DataFrame([
+                    {
+                        "Položka": "",
+                        "Kategória": "",
+                        "Typ vybavenia": "",
+                        "Cena bez DPH (€)": "",
+                        "Množstvo": "Celkom bez DPH",
+                        "Celkom": round(total, 2)
+                    },
+                    {
+                        "Položka": "",
+                        "Kategória": "",
+                        "Typ vybavenia": "",
+                        "Cena bez DPH (€)": "",
+                        "Množstvo": "Celkom s DPH",
+                        "Celkom": round(total_w_dph, 2)
+                    }
+                ])
+
+                export_df = pd.concat([export_df, total_rows], ignore_index=True)
+
+                excel_data = to_excel_bytes(export_df)
+
+                st.download_button(
+                    label="Stiahnuť Excel",
+                    data=excel_data,
+                    file_name="zoznam.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
