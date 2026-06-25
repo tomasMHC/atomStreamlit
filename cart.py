@@ -735,7 +735,7 @@ with right_col:
 
                 with f:
                     if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
-                        st.session_state.cart.pop(i)
+                        st.session_state.cart.pop(i-1)
                         clear_cart_qty_widget_state()
                         st.toast("Položka odstránená")
                         st.experimental_rerun()
