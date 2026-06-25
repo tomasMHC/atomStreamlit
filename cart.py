@@ -764,7 +764,7 @@ with left_col:
                 with d1:
                     st.markdown(
                         f"""
-                        <div style="font-size:13px; color:gray; margin-top:-4px; margin-bottom:6px;">
+                        <div class="item-description">
                             {row.description}
                         </div>
                         """,
