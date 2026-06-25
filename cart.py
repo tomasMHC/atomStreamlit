@@ -771,7 +771,7 @@ with left_col:
                         unsafe_allow_html=True
                     )
 
-            st.markdown("<hr style='margin:2px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
 
 
 
@@ -787,8 +787,8 @@ def qty_changed(cart_id):
     update_cart_qty(cart_id, new_qty)
 
 with right_col:
-    st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
-
+    st.markdown('<div class="cart-panel">', unsafe_allow_html=True)
+    
     with st.container(border=True):
         st.markdown("""
         <div class="cart-header">
