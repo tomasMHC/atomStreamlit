@@ -735,7 +735,12 @@ with left_col:
 
             with c5:
                 if st.button("Pridať", key=f"add_{row.Index}", use_container_width=True):
-                    add_to_cart(row, 1)
+                    add_to_cart({
+                        "item": row.item,
+                        "eqp_type": row.eqp_type,
+                        "category": row.category,
+                        "price": row.price
+                    })
                     st.toast("Položka pridaná")
 
             if "description" in row and pd.notna(row.description) and str(row.description).strip() != "":
