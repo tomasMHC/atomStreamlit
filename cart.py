@@ -753,7 +753,7 @@ with right_col:
                     if st.button("Odstrániť", key=f"remove_{cart_id}", use_container_width=True):
                         remove_from_cart(cart_id)
                         st.toast("Položka odstránená")
-                        st.experimental_rerun()
+                        st.rerun()
 
                 st.divider()
 
