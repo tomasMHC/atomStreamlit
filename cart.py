@@ -786,16 +786,10 @@ def qty_changed(cart_id):
     new_qty = st.session_state[key]
     update_cart_qty(cart_id, new_qty)
 
-# ---------------------------------------------------------
-# Cart (sticky in right column)
-# ---------------------------------------------------------
 with right_col:
     st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
-
-    # === CART PANEL WRAPPER (CSS .cart-panel finally applies) ===
-    st.markdown('<div class="cart-panel">', unsafe_allow_html=True)
-
-    with st.container(border=False):
+    
+    with st.container(border=True):
         st.markdown("""
         <div class="cart-header">
             <div class="cart-header-title">🛒 Vybraté položky</div>
@@ -809,27 +803,26 @@ with right_col:
             st.info("Zoznam položiek je prázdny.")
         else:
             h1, h2, h3, h4, h5, h6 = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
-            with h1: st.markdown("**Položka**")
-            with h2: st.markdown("**Typ**")
-            with h3: st.markdown("**Cena (€)**")
-            with h4: st.markdown("**Množ.**")
-            with h5: st.markdown("**Spolu (€)**")
-            with h6: st.markdown("")
+            with h1:
+                st.markdown("**Položka**")
+            with h2:
+                st.markdown("**Typ**")
+            with h3:
+                st.markdown("**Cena (€)**")
+            with h4:
+                st.markdown("**Množ.**")
+            with h5:
+                st.markdown("**Spolu (€)**")
+            with h6:
+                st.markdown("")
 
             st.divider()
 
-            # Callback
-            def qty_changed(cart_id):
-                key = f"cart_qty_{cart_id}"
-                if key not in st.session_state:
-                    return
-                new_qty = st.session_state[key]
-                update_cart_qty_by_id(cart_id, new_qty)
 
-            # Render položiek v košíku
+
             for _, row in cdf.iterrows():
-                cart_id = int(row["cart_id"])
                 a, b, c, d, e, f = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
+                cart_id = int(row["cart_id"])
 
                 with a:
                     st.markdown(
@@ -880,21 +873,21 @@ with right_col:
                 with f:
                     if st.button("Odstrániť", key=f"remove_{cart_id}", use_container_width=True):
                         remove_from_cart(cart_id)
-                        clear_cart_qty_widget_state()
                         st.toast("Položka odstránená")
-                        st.experimental_rerun()
+                        st.rerun()
 
                 st.divider()
 
-            # Prepočet po zmenách
+            # po prípadných zmenách v košíku prepočítaj cdf
             cdf = get_cart_df()
+
             total = cdf["line_total"].sum()
             total_w_dph = total * 1.23
 
-            # Sumár
             with st.container(border=True):
                 r1c1, r1c2 = st.columns([2.2, 1])
-                with r1c1: st.markdown("Celkom bez DPH")
+                with r1c1:
+                    st.markdown("Celkom bez DPH")
                 with r1c2:
                     st.markdown(
                         f"<div style='text-align:right; font-weight:600;'>{total:.2f} €</div>",
@@ -915,7 +908,6 @@ with right_col:
                         unsafe_allow_html=True
                     )
 
-            # Tlačidlá
             btn1, btn2 = st.columns(2)
             with btn1:
                 if st.button("Vymazať zoznam", use_container_width=True):
@@ -923,10 +915,43 @@ with right_col:
                     st.session_state.next_cart_id = 1
                     clear_cart_qty_widget_state()
                     st.toast("Zoznam vymazaný")
-                    st.experimental_rerun()
-
+                    
             with btn2:
+                # Export do Excelu – s riadkami CELKOM
+                export_df = cdf.copy()
+                export_df = export_df.rename(columns={
+                    "item": "Položka",
+                    "category": "Kategória",
+                    "eqp_type": "Typ vybavenia",
+                    "price": "Cena bez DPH (€)",
+                    "qty": "Množstvo",
+                    "line_total": "Celkom bez DPH (€)"
+                })
+
+                total_rows = pd.DataFrame([
+                    {
+                        "Položka": "",
+                        "Kategória": "",
+                        "Typ vybavenia": "",
+                        "Cena bez DPH (€)": "",
+                        "Množstvo": "Celkom bez DPH",
+                        "Celkom": round(total, 2)
+                    },
+                    {
+                        "Položka": "",
+                        "Kategória": "",
+                        "Typ vybavenia": "",
+                        "Cena bez DPH (€)": "",
+                        "Množstvo": "Celkom s DPH",
+                        "Celkom": round(total_w_dph, 2)
+                    }
+                ])
+
+                export_df = pd.concat([export_df, total_rows], ignore_index=True)
+                export_df = export_df[["Položka", "Kategória", "Typ vybavenia", "Cena bez DPH (€)", "Množstvo", "Celkom"]]
                 excel_data = build_export_excel(st.session_state.cart, total, total_w_dph)
+
+
                 st.download_button(
                     label="Stiahnuť Excel",
                     data=excel_data,
@@ -935,11 +960,7 @@ with right_col:
                     use_container_width=True
                 )
 
-    # === END CART PANEL WRAPPER ===
     st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)  # sticky-cart-container
-
 
 
 
