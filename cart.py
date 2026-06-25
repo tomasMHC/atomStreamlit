@@ -678,7 +678,10 @@ with right_col:
             st.divider()
 
             def qty_changed(i):
-                new_qty = st.session_state[f"cart_qty_{i}"]
+                key = f"cart_qty_{i}"
+                if key not in st.session_state:
+                    return
+                new_qty = st.session_state[key]
                 update_cart_qty(i, new_qty)
 
             for i, row in cdf.iterrows():
@@ -736,7 +739,7 @@ with right_col:
                         clear_cart_qty_widget_state()
                         st.toast("Položka odstránená")
                 st.divider()
-                
+
             # po prípadných zmenách v košíku prepočítaj cdf
             cdf = get_cart_df()
 
