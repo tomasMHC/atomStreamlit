@@ -357,33 +357,34 @@ if "cart_lookup" not in st.session_state:
     st.session_state.cart_lookup = {}
 
 
-def add_to_cart(item_row, qty):
-    item_name = str(item_row["item"])
-    category = str(item_row["category"])
-    price = float(item_row["price"])
-    eqp_type = str(item_row["eqp_type"])
-    qty = int(qty)
+def add_to_cart(item, category, eqp_type, price, qty=1):
+    if "cart" not in st.session_state:
+        st.session_state.cart = []
+    if "next_cart_id" not in st.session_state:
+        st.session_state.next_cart_id = 1
 
-    key = make_cart_key(item_name, category, price, eqp_type)
+    for cart_item in st.session_state.cart:
+        if (
+            cart_item["item"] == item
+            and cart_item["category"] == category
+            and cart_item["eqp_type"] == eqp_type
+            and float(cart_item["price"]) == float(price)
+        ):
+            cart_item["qty"] += int(qty)
+            st.session_state[f"cart_qty_{cart_item['cart_id']}"] = cart_item["qty"]
+            return
 
-    if key in st.session_state.cart_lookup:
-        cart_id = st.session_state.cart_lookup[key]
-        for item in st.session_state.cart:
-            if item["cart_id"] == cart_id:
-                item["qty"] += qty
-                return
-
-    cart_id = st.session_state.next_cart_id
-    st.session_state.cart.append({
-        "cart_id": cart_id,
-        "item": item_name,
+    new_item = {
+        "cart_id": st.session_state.next_cart_id,
+        "item": item,
         "category": category,
-        "price": price,
-        "qty": qty,
-        "eqp_type": eqp_type
-    })
-    st.session_state.cart_lookup[key] = cart_id
+        "eqp_type": eqp_type,
+        "price": float(price),
+        "qty": int(qty),
+    }
+    st.session_state.cart.append(new_item)
     st.session_state.next_cart_id += 1
+    st.session_state[f"cart_qty_{new_item['cart_id']}"] = new_item["qty"]
 
 
 def get_cart_df():
@@ -417,13 +418,13 @@ def reset_setup(keep_cart=False):
 def update_cart_qty(cart_id, new_qty):
     new_qty = int(new_qty)
 
-    for idx, cart_item in enumerate(st.session_state.cart):
-        if cart_item["cart_id"] == cart_id:
+    for item in st.session_state.get("cart", []):
+        if item["cart_id"] == cart_id:
             if new_qty < 1:
-                st.session_state.cart.pop(idx)
-                clear_cart_qty_widget_state()
+                remove_from_cart(cart_id)
             else:
-                st.session_state.cart[idx]["qty"] = new_qty
+                item["qty"] = new_qty
+                st.session_state[f"cart_qty_{cart_id}"] = new_qty
             return
 
 def remove_from_cart(cart_id):
@@ -751,12 +752,13 @@ with left_col:
 
             with c5:
                 if st.button("Pridať", key=f"add_{row.Index}", use_container_width=True):
-                    add_to_cart({
-                        "item": row.item,
-                        "eqp_type": row.eqp_type,
-                        "category": row.category,
-                        "price": row.price
-                    },1)
+                    add_to_cart(
+                        item=row.item,
+                        category=row.category,
+                        eqp_type=row.eqp_type,
+                        price=row.price,
+                        qty=1
+                    )
                     st.toast("Položka pridaná")
 
             if hasattr(row, "description") and pd.notna(row.description) and str(row.description).strip() != "":
@@ -787,8 +789,6 @@ def qty_changed(cart_id):
     update_cart_qty(cart_id, new_qty)
 
 with right_col:
-    st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
-    
     with st.container(border=True):
         st.markdown("""
         <div class="cart-header">
@@ -915,6 +915,7 @@ with right_col:
                     st.session_state.next_cart_id = 1
                     clear_cart_qty_widget_state()
                     st.toast("Zoznam vymazaný")
+                    st.rerun()
                     
             with btn2:
                 # Export do Excelu – s riadkami CELKOM
