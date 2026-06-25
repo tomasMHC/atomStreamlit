@@ -263,13 +263,13 @@ def add_to_cart(item_row, qty):
 def get_cart_df():
     if not st.session_state.cart:
         return pd.DataFrame(columns=[
-            "item", "category", "eqp_type", "price", "qty", "line_total"
+            "cart_id", "item", "category", "eqp_type", "price", "qty", "line_total"
         ])
 
     df = pd.DataFrame(st.session_state.cart)
     df["line_total"] = df["price"] * df["qty"]
 
-    return df[["item", "category", "eqp_type", "price", "qty", "line_total"]]
+    return df[["cart_id", "item", "category", "eqp_type", "price", "qty", "line_total"]]
 
 
 def reset_setup(keep_cart=False):
@@ -288,14 +288,25 @@ def reset_setup(keep_cart=False):
         clear_cart_qty_widget_state()
 
 
-def update_cart_qty(index, new_qty):
-    if int(new_qty) < 1:
-        st.session_state.cart.pop(index)
-        clear_cart_qty_widget_state()
-    else:
-        st.session_state.cart[index]["qty"] = int(new_qty)
+def update_cart_qty(cart_id, new_qty):
+    new_qty = int(new_qty)
 
+    for idx, cart_item in enumerate(st.session_state.cart):
+        if cart_item["cart_id"] == cart_id:
+            if new_qty < 1:
+                st.session_state.cart.pop(idx)
+                clear_cart_qty_widget_state()
+            else:
+                st.session_state.cart[idx]["qty"] = new_qty
+            return
 
+def remove_from_cart(cart_id):
+    for idx, cart_item in enumerate(st.session_state.cart):
+        if cart_item["cart_id"] == cart_id:
+            st.session_state.cart.pop(idx)
+            clear_cart_qty_widget_state()
+            return
+        
 def clear_cart_qty_widget_state():
     for key in list(st.session_state.keys()):
         if str(key).startswith("cart_qty_"):
@@ -647,12 +658,12 @@ with left_col:
 # Cart (sticky in right column)
 # ---------------------------------------------------------
 
-def qty_changed(i):
-    key = f"cart_qty_{i}"
+def qty_changed(cart_id):
+    key = f"cart_qty_{cart_id}"
     if key not in st.session_state:
         return
     new_qty = st.session_state[key]
-    update_cart_qty(i, new_qty)
+    update_cart_qty(cart_id, new_qty)
 
 with right_col:
     st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
@@ -688,8 +699,9 @@ with right_col:
 
 
 
-            for i, row in cdf.iterrows():
+            for _, row in cdf.iterrows():
                 a, b, c, d, e, f = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
+                cart_id = int(row["cart_id"])
 
                 with a:
                     st.markdown(
@@ -709,7 +721,7 @@ with right_col:
                     st.write(f"{row['price']:.2f} €")
 
                 with d:
-                    qty_key = f"cart_qty_{i}"
+                    qty_key = f"cart_qty_{cart_id}"
                     if qty_key not in st.session_state:
                         st.session_state[qty_key] = int(row["qty"])
 
@@ -721,7 +733,7 @@ with right_col:
                         key=qty_key,
                         label_visibility="collapsed",
                         on_change=qty_changed,
-                        args=(i,)
+                        args=(cart_id,)
                     )
 
                 with e:
@@ -738,9 +750,8 @@ with right_col:
                     )
 
                 with f:
-                    if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
-                        st.session_state.cart.pop(i)
-                        clear_cart_qty_widget_state()
+                    if st.button("Odstrániť", key=f"remove_{cart_id}", use_container_width=True):
+                        remove_from_cart(cart_id)
                         st.toast("Položka odstránená")
                         st.experimental_rerun()
 
