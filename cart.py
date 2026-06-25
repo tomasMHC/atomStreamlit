@@ -733,8 +733,8 @@ with right_col:
                 with f:
                     if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
                         st.session_state.cart.pop(i)
+                        clear_cart_qty_widget_state()
                         st.toast("Položka odstránená")
-                        st.experimental_rerun()
 
                 st.divider()
 
@@ -772,8 +772,8 @@ with right_col:
                     st.session_state.cart = []
                     st.session_state.next_cart_id = 1
                     clear_cart_qty_widget_state()
-                    st.rerun()
-
+                    st.toast("Zoznam vymazaný")
+                    
             with btn2:
                 # Export do Excelu – s riadkami CELKOM
                 export_df = cdf.copy()
