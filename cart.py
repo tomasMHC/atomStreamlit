@@ -738,6 +738,7 @@ with right_col:
                         st.session_state.cart.pop(i)
                         clear_cart_qty_widget_state()
                         st.toast("Položka odstránená")
+                        st.experimental_rerun()
                 st.divider()
 
             # po prípadných zmenách v košíku prepočítaj cdf
