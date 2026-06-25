@@ -223,6 +223,8 @@ def build_export_excel(cart_records, total, total_w_dph):
     cdf = pd.DataFrame(cart_records)
     if not cdf.empty:
         cdf["line_total"] = cdf["price"] * cdf["qty"]
+        cdf["line_total"] = cdf["line_total"].round(2)
+        cdf["price"] = cdf["price"].round(2)
 
     export_df = cdf.copy()
     export_df = export_df.rename(columns={
