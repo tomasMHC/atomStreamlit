@@ -740,7 +740,7 @@ with left_col:
                         "eqp_type": row.eqp_type,
                         "category": row.category,
                         "price": row.price
-                    })
+                    },1)
                     st.toast("Položka pridaná")
 
             if "description" in row and pd.notna(row.description) and str(row.description).strip() != "":
