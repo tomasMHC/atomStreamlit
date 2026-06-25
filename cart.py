@@ -735,9 +735,10 @@ with right_col:
                         st.session_state.cart.pop(i)
                         clear_cart_qty_widget_state()
                         st.toast("Položka odstránená")
-
                 st.divider()
-
+                
+            # po prípadných zmenách v košíku prepočítaj cdf
+            cdf = get_cart_df()
 
             total = cdf["line_total"].sum()
             total_w_dph = total * 1.23
