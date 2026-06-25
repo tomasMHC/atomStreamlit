@@ -78,6 +78,20 @@ div[data-baseweb="input"] { min-width: 80px !important; }
     padding-right: 10px;
 }
 
+/* kompaktnejšie riadky v zozname položiek */
+.items-panel .stColumn {
+    padding-top: 0px !important;
+    padding-bottom: 0px !important;
+}
+
+/* kompaktnejší popis položky */
+.item-description {
+    font-size: 13px;
+    color: gray;
+    margin-top: -2px;
+    margin-bottom: 2px;
+}
+
 /* RIGHT side cart card */
 .cart-panel {
     background: #f8fafc;
