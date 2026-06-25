@@ -718,7 +718,7 @@ with left_col:
 
         st.divider()
 
-        for idx, row in filtered.itertuples(index=True):
+        for row in filtered.itertuples(index=True):
             c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 1.3, 1.2])
 
             with c1:
@@ -734,7 +734,7 @@ with left_col:
                 st.write(f"{row.price:.2f}")
 
             with c5:
-                if st.button("Pridať", key=f"add_{idx}", use_container_width=True):
+                if st.button("Pridať", key=f"add_{row.Index}", use_container_width=True):
                     add_to_cart(row, 1)
                     st.toast("Položka pridaná")
 
