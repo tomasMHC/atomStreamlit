@@ -156,6 +156,59 @@ def download_excel_from_private_url():
 
     return response.content
 
+@st.cache_data(show_spinner=False)
+def get_excel_sheets(file_bytes):
+    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
+    return xl.sheet_names
+
+@st.cache_data(show_spinner=False)
+def load_selected_sheets(file_bytes, selected_sheets):
+    sheets_dict = pd.read_excel(
+        BytesIO(file_bytes),
+        sheet_name=selected_sheets,
+        engine="openpyxl"
+    )
+
+    frames = []
+    for sheet_name, df in sheets_dict.items():
+        if df is None or df.empty:
+            continue
+
+        df["__sheet__"] = sheet_name   # netreba temp = df.copy()
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    return pd.concat(frames, ignore_index=True)
+
+@st.cache_data(show_spinner=False)
+def build_standard_table(df, item_col, category_col, price_col, desc_col=None):
+    rename_map = {
+        item_col: "item",
+        category_col: "category",
+        price_col: "price"
+    }
+
+    if desc_col:
+        rename_map[desc_col] = "description"
+
+    required = ["item", "category", "price", "__sheet__"]
+    if desc_col:
+        required.append("description")
+
+    out = df.rename(columns=rename_map)[required]
+
+    out["item"] = out["item"].astype(str).str.strip()
+    out["category"] = out["category"].astype(str).str.strip()
+    out["price"] = pd.to_numeric(out["price"], errors="coerce")
+
+    out = out.dropna(subset=["item", "category", "price"])
+    out = out[(out["item"] != "") & (out["category"] != "")]
+    out = out.rename(columns={"__sheet__": "eqp_type"}).reset_index(drop=True)
+
+    return out
+
 
 def normalize_text(text):
     text = str(text).strip().lower()
@@ -231,32 +284,40 @@ def build_standard_table(df, item_col, category_col, price_col, desc_col=None):
 
     return out
 
+def make_cart_key(item_name, category, price, eqp_type):
+    return (item_name, category, float(price), eqp_type)
+
+
+if "cart_lookup" not in st.session_state:
+    st.session_state.cart_lookup = {}
+
 
 def add_to_cart(item_row, qty):
     item_name = str(item_row["item"])
     category = str(item_row["category"])
     price = float(item_row["price"])
     eqp_type = str(item_row["eqp_type"])
+    qty = int(qty)
 
-    for cart_item in st.session_state.cart:
-        if (
-            cart_item["item"] == item_name
-            and cart_item["category"] == category
-            and cart_item["price"] == price
-            and cart_item["eqp_type"] == eqp_type
-        ):
-            cart_item["qty"] += int(qty)
-            return
+    key = make_cart_key(item_name, category, price, eqp_type)
 
+    if key in st.session_state.cart_lookup:
+        cart_id = st.session_state.cart_lookup[key]
+        for item in st.session_state.cart:
+            if item["cart_id"] == cart_id:
+                item["qty"] += qty
+                return
+
+    cart_id = st.session_state.next_cart_id
     st.session_state.cart.append({
-        "cart_id": st.session_state.next_cart_id,
+        "cart_id": cart_id,
         "item": item_name,
         "category": category,
         "price": price,
-        "qty": int(qty),
+        "qty": qty,
         "eqp_type": eqp_type
     })
-
+    st.session_state.cart_lookup[key] = cart_id
     st.session_state.next_cart_id += 1
 
 
@@ -564,29 +625,27 @@ if data is None or data.empty:
 # =========================================================
 filter1, filter2, filter3 = st.columns([2, 2, 3])
 
-filtered = data.copy()
+filtered = data
 
 with filter1:
     eqp_options = ["Všetko"] + sorted(data["eqp_type"].dropna().unique().tolist())
     selected_eqp = st.selectbox("Typ vybavenia", eqp_options)
 
 if selected_eqp != "Všetko":
-    filtered = filtered[filtered["eqp_type"] == selected_eqp].copy()
+    filtered = filtered[filtered["eqp_type"] == selected_eqp]
 
 with filter2:
     category_options = ["Všetko"] + sorted(filtered["category"].dropna().unique().tolist())
     selected_category = st.selectbox("Kategória", category_options)
 
 if selected_category != "Všetko":
-    filtered = filtered[filtered["category"] == selected_category].copy()
+    filtered = filtered[filtered["category"] == selected_category]
 
 with filter3:
     search_text = st.text_input("Hľadať položku")
 
 if search_text:
-    filtered = filtered[
-        filtered["item"].str.contains(search_text, case=False, na=False)
-    ].copy()
+    filtered = filtered[filtered["item"].str.contains(search_text, case=False, na=False)]
 
 filtered = filtered.sort_values(["category", "item"]).reset_index(drop=True)
 
@@ -827,7 +886,7 @@ with right_col:
                 ])
 
                 export_df = pd.concat([export_df, total_rows], ignore_index=True)
-
+                export_df = export_df[["Položka", "Kategória", "Typ vybavenia", "Cena bez DPH (€)", "Množstvo", "Celkom"]]
                 excel_data = to_excel_bytes(export_df)
 
                 st.download_button(
