@@ -5,7 +5,7 @@ from io import BytesIO
 import requests
 import unicodedata
 from pathlib import Path
-
+MAX_ITEMS = 50
 st.set_page_config(page_title="PharmaGroup katalóg", layout="wide")
 
 # =========================================================
@@ -209,6 +209,55 @@ def build_standard_table(df, item_col, category_col, price_col, desc_col=None):
 
     return out
 
+@st.cache_data(show_spinner=False)
+def load_logo(path):
+    p = Path(path)
+    if not p.exists():
+        return None
+
+    with open(p, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+@st.cache_data(show_spinner=False)
+def build_export_excel(cart_records, total, total_w_dph):
+    cdf = pd.DataFrame(cart_records)
+    if not cdf.empty:
+        cdf["line_total"] = cdf["price"] * cdf["qty"]
+
+    export_df = cdf.copy()
+    export_df = export_df.rename(columns={
+        "item": "Položka",
+        "category": "Kategória",
+        "eqp_type": "Typ vybavenia",
+        "price": "Cena bez DPH (€)",
+        "qty": "Množstvo",
+        "line_total": "Celkom"
+    })
+
+    export_df = export_df[["Položka", "Kategória", "Typ vybavenia", "Cena bez DPH (€)", "Množstvo", "Celkom"]]
+
+    total_rows = pd.DataFrame([
+        {
+            "Položka": "",
+            "Kategória": "",
+            "Typ vybavenia": "",
+            "Cena bez DPH (€)": "",
+            "Množstvo": "Celkom bez DPH",
+            "Celkom": round(total, 2)
+        },
+        {
+            "Položka": "",
+            "Kategória": "",
+            "Typ vybavenia": "",
+            "Cena bez DPH (€)": "",
+            "Množstvo": "Celkom s DPH",
+            "Celkom": round(total_w_dph, 2)
+        }
+    ])
+
+    export_df = pd.concat([export_df, total_rows], ignore_index=True)
+    return to_excel_bytes(export_df)
+
 
 def normalize_text(text):
     text = str(text).strip().lower()
@@ -365,23 +414,15 @@ def remove_from_cart(cart_id):
     for idx, cart_item in enumerate(st.session_state.cart):
         if cart_item["cart_id"] == cart_id:
             st.session_state.cart.pop(idx)
-            clear_cart_qty_widget_state()
+            qty_key = f"cart_qty_{cart_id}"
+            if qty_key in st.session_state:
+                del st.session_state[qty_key]
             return
         
 def clear_cart_qty_widget_state():
     for key in list(st.session_state.keys()):
         if str(key).startswith("cart_qty_"):
             del st.session_state[key]
-
-
-def load_logo(path):
-    p = Path(path)
-    if not p.exists():
-        return None
-
-    with open(p, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
 
 def try_autoload_default_excel():
     file_bytes = download_excel_from_private_url()
@@ -677,33 +718,33 @@ with left_col:
 
         st.divider()
 
-        for idx, row in filtered.iterrows():
+        for idx, row in filtered.itertuples(index=True):
             c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 1.3, 1.2])
 
             with c1:
-                st.markdown(f"**{row['item']}**")
+                st.markdown(f"**{row.item}**")
 
             with c2:
-                st.write(row["eqp_type"])
+                st.write(row.eqp_type)
 
             with c3:
-                st.write(row["category"])
+                st.write(row.category)
 
             with c4:
-                st.write(f"{row['price']:.2f}")
+                st.write(f"{row.price:.2f}")
 
             with c5:
                 if st.button("Pridať", key=f"add_{idx}", use_container_width=True):
                     add_to_cart(row, 1)
                     st.toast("Položka pridaná")
 
-            if "description" in row and pd.notna(row["description"]):
+            if "description" in row and pd.notna(row.description) and str(row.description).strip() != "":
                 d1, _ = st.columns([6, 5])
                 with d1:
                     st.markdown(
                         f"""
                         <div style="font-size:13px; color:gray; margin-top:-4px; margin-bottom:6px;">
-                            {row['description']}
+                            {row.description}
                         </div>
                         """,
                         unsafe_allow_html=True
@@ -887,7 +928,8 @@ with right_col:
 
                 export_df = pd.concat([export_df, total_rows], ignore_index=True)
                 export_df = export_df[["Položka", "Kategória", "Typ vybavenia", "Cena bez DPH (€)", "Množstvo", "Celkom"]]
-                excel_data = to_excel_bytes(export_df)
+                excel_data = build_export_excel(st.session_state.cart, total, total_w_dph)
+
 
                 st.download_button(
                     label="Stiahnuť Excel",
