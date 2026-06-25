@@ -642,9 +642,18 @@ with left_col:
             st.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
 
 
+
 # ---------------------------------------------------------
 # Cart (sticky in right column)
 # ---------------------------------------------------------
+
+def qty_changed(i):
+    key = f"cart_qty_{i}"
+    if key not in st.session_state:
+        return
+    new_qty = st.session_state[key]
+    update_cart_qty(i, new_qty)
+
 with right_col:
     st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
 
@@ -677,12 +686,7 @@ with right_col:
 
             st.divider()
 
-            def qty_changed(i):
-                key = f"cart_qty_{i}"
-                if key not in st.session_state:
-                    return
-                new_qty = st.session_state[key]
-                update_cart_qty(i, new_qty)
+
 
             for i, row in cdf.iterrows():
                 a, b, c, d, e, f = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
@@ -735,10 +739,11 @@ with right_col:
 
                 with f:
                     if st.button("Odstrániť", key=f"remove_{i}", use_container_width=True):
-                        st.session_state.cart.pop(i-1)
+                        st.session_state.cart.pop(i)
                         clear_cart_qty_widget_state()
                         st.toast("Položka odstránená")
                         st.experimental_rerun()
+
                 st.divider()
 
             # po prípadných zmenách v košíku prepočítaj cdf
