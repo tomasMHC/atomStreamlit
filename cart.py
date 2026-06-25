@@ -771,7 +771,7 @@ with left_col:
                         unsafe_allow_html=True
                     )
 
-            st.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin:2px 0;'>", unsafe_allow_html=True)
 
 
 
