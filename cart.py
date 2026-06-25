@@ -743,7 +743,7 @@ with left_col:
                     },1)
                     st.toast("Položka pridaná")
 
-            if "description" in row and pd.notna(row.description) and str(row.description).strip() != "":
+            if hasattr(row, "description") and pd.notna(row.description) and str(row.description).strip() != "":
                 d1, _ = st.columns([6, 5])
                 with d1:
                     st.markdown(
