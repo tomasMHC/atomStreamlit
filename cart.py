@@ -5,44 +5,51 @@ from io import BytesIO
 import requests
 import unicodedata
 from pathlib import Path
-MAX_ITEMS = 50
-st.set_page_config(page_title="PharmaGroup katalóg", layout="wide")
+
+# =========================================================
+# Page config must be first Streamlit command
+# =========================================================
+st.set_page_config(page_title="PharmaGroup katalóg USG", layout="wide")
+
+# =========================================================
+# Health check endpoint for ping services
+# Example URL: https://your-app.streamlit.app/?ping=1
+# =========================================================
+if st.query_params.get("ping") == "1":
+    st.write("OK")
+    st.stop()
+
+
+# =========================================================
+# Constants
+# =========================================================
+DEFAULT_PAGE_SIZE = 50
+VAT_RATE = 1.23
+
 
 # =========================================================
 # Session state initialization
 # =========================================================
-if "setup_done" not in st.session_state:
-    st.session_state.setup_done = False
+defaults = {
+    "setup_done": False,
+    "file_bytes": None,
+    "data": None,
+    "cart": [],
+    "selected_sheets": [],
+    "item_col": None,
+    "category_col": None,
+    "price_col": None,
+    "desc_col": None,
+    "autoload_enabled": True,
+    "next_cart_id": 1,
+    "page": 1,
+    "last_filter_state": None,
+}
 
-if "file_bytes" not in st.session_state:
-    st.session_state.file_bytes = None
-
-if "data" not in st.session_state:
-    st.session_state.data = None
-
-if "cart" not in st.session_state:
-    st.session_state.cart = []
-
-if "selected_sheets" not in st.session_state:
-    st.session_state.selected_sheets = []
-
-if "item_col" not in st.session_state:
-    st.session_state.item_col = None
-
-if "category_col" not in st.session_state:
-    st.session_state.category_col = None
-
-if "price_col" not in st.session_state:
-    st.session_state.price_col = None
-
-if "desc_col" not in st.session_state:
-    st.session_state.desc_col = None
-
-if "autoload_enabled" not in st.session_state:
-    st.session_state.autoload_enabled = True
-
-if "next_cart_id" not in st.session_state:
-    st.session_state.next_cart_id = 1
+for_key = None
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 
 # =========================================================
@@ -66,25 +73,21 @@ div[data-baseweb="input"] { min-width: 80px !important; }
     padding-bottom: 1.2rem;
 }
 
-/* sticky cart */
 .sticky-cart-container {
     position: sticky;
     top: 12px;
     z-index: 50;
 }
 
-/* LEFT side section */
 .items-panel {
     padding-right: 10px;
 }
 
-/* kompaktnejšie riadky v zozname položiek */
 .items-panel .stColumn {
     padding-top: 0px !important;
     padding-bottom: 0px !important;
 }
 
-/* kompaktnejší popis položky */
 .item-description {
     font-size: 13px;
     color: gray;
@@ -92,16 +95,6 @@ div[data-baseweb="input"] { min-width: 80px !important; }
     margin-bottom: 2px;
 }
 
-/* RIGHT side cart card */
-.cart-panel {
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
-    border-radius: 18px;
-    padding: 18px 18px 16px 18px;
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-}
-
-/* cart header strip */
 .cart-header {
     background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%);
     border: 1px solid #dbeafe;
@@ -123,21 +116,13 @@ div[data-baseweb="input"] { min-width: 80px !important; }
     margin-top: 2px;
 }
 
-/* subtle separator feel between columns on desktop */
-@media (min-width: 900px) {
-    .cart-panel {
-        margin-left: 10px;
-    }
+.pagination-info {
+    text-align: center;
+    font-weight: 600;
+    padding-top: 0.45rem;
 }
 
-/* mobile */
 @media (max-width: 768px) {
-    .cart-panel {
-        margin-top: 14px;
-        padding: 14px;
-        border-radius: 14px;
-    }
-
     .cart-header-title {
         font-size: 18px;
     }
@@ -149,6 +134,22 @@ div[data-baseweb="input"] { min-width: 80px !important; }
 # =========================================================
 # Helpers
 # =========================================================
+def normalize_text(text):
+    text = str(text).strip().lower()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return text
+
+
+def guess_column(columns, candidates):
+    normalized = {normalize_text(c): c for c in columns}
+    for cand in candidates:
+        cand_norm = normalize_text(cand)
+        if cand_norm in normalized:
+            return normalized[cand_norm]
+    return None
+
+
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -170,136 +171,18 @@ def download_excel_from_private_url():
 
     return response.content
 
+
 @st.cache_data(show_spinner=False)
 def get_excel_sheets(file_bytes):
     xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
     return xl.sheet_names
 
+
 @st.cache_data(show_spinner=False)
 def load_selected_sheets(file_bytes, selected_sheets):
     sheets_dict = pd.read_excel(
         BytesIO(file_bytes),
-        sheet_name=selected_sheets,
-        engine="openpyxl"
-    )
-
-    frames = []
-    for sheet_name, df in sheets_dict.items():
-        if df is None or df.empty:
-            continue
-
-        df["__sheet__"] = sheet_name   # netreba temp = df.copy()
-        frames.append(df)
-
-    if not frames:
-        return pd.DataFrame()
-
-    return pd.concat(frames, ignore_index=True)
-
-@st.cache_data(show_spinner=False)
-def build_standard_table(df, item_col, category_col, price_col, desc_col=None):
-    rename_map = {
-        item_col: "item",
-        category_col: "category",
-        price_col: "price"
-    }
-
-    if desc_col:
-        rename_map[desc_col] = "description"
-
-    required = ["item", "category", "price", "__sheet__"]
-    if desc_col:
-        required.append("description")
-
-    out = df.rename(columns=rename_map)[required]
-
-    out["item"] = out["item"].astype(str).str.strip()
-    out["category"] = out["category"].astype(str).str.strip()
-    out["price"] = pd.to_numeric(out["price"], errors="coerce")
-
-    out = out.dropna(subset=["item", "category", "price"])
-    out = out[(out["item"] != "") & (out["category"] != "")]
-    out = out.rename(columns={"__sheet__": "eqp_type"}).reset_index(drop=True)
-
-    return out
-
-@st.cache_data(show_spinner=False)
-def load_logo(path):
-    p = Path(path)
-    if not p.exists():
-        return None
-
-    with open(p, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
-@st.cache_data(show_spinner=False)
-def build_export_excel(cart_records, total, total_w_dph):
-    cdf = pd.DataFrame(cart_records)
-    if not cdf.empty:
-        cdf["line_total"] = cdf["price"] * cdf["qty"]
-        cdf["line_total"] = cdf["line_total"].round(2)
-        cdf["price"] = cdf["price"].round(2)
-
-    export_df = cdf.copy()
-    export_df = export_df.rename(columns={
-        "item": "Položka",
-        "category": "Kategória",
-        "eqp_type": "Typ vybavenia",
-        "price": "Cena bez DPH (€)",
-        "qty": "Množstvo",
-        "line_total": "Celkom"
-    })
-
-    export_df = export_df[["Položka", "Kategória", "Typ vybavenia", "Cena bez DPH (€)", "Množstvo", "Celkom"]]
-
-    total_rows = pd.DataFrame([
-        {
-            "Položka": "",
-            "Kategória": "",
-            "Typ vybavenia": "",
-            "Cena bez DPH (€)": "",
-            "Množstvo": "Celkom bez DPH",
-            "Celkom": round(total, 2)
-        },
-        {
-            "Položka": "",
-            "Kategória": "",
-            "Typ vybavenia": "",
-            "Cena bez DPH (€)": "",
-            "Množstvo": "Celkom s DPH",
-            "Celkom": round(total_w_dph, 2)
-        }
-    ])
-
-    export_df = pd.concat([export_df, total_rows], ignore_index=True)
-    return to_excel_bytes(export_df)
-
-
-def normalize_text(text):
-    text = str(text).strip().lower()
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    return text
-
-
-def guess_column(columns, candidates):
-    normalized = {normalize_text(c): c for c in columns}
-    for cand in candidates:
-        cand_norm = normalize_text(cand)
-        if cand_norm in normalized:
-            return normalized[cand_norm]
-    return None
-
-
-def get_excel_sheets(file_bytes):
-    xl = pd.ExcelFile(BytesIO(file_bytes), engine="openpyxl")
-    return xl.sheet_names
-
-
-def load_selected_sheets(file_bytes, selected_sheets):
-    sheets_dict = pd.read_excel(
-        BytesIO(file_bytes),
-        sheet_name=selected_sheets,
+        sheet_name=list(selected_sheets),
         engine="openpyxl"
     )
 
@@ -318,85 +201,200 @@ def load_selected_sheets(file_bytes, selected_sheets):
     return pd.concat(frames, ignore_index=True)
 
 
+@st.cache_data(show_spinner=False)
 def build_standard_table(df, item_col, category_col, price_col, desc_col=None):
     rename_map = {
         item_col: "item",
         category_col: "category",
-        price_col: "price"
+        price_col: "price",
     }
 
     if desc_col:
         rename_map[desc_col] = "description"
 
-    out = df.rename(columns=rename_map).copy()
-
     required = ["item", "category", "price", "__sheet__"]
     if desc_col:
         required.append("description")
 
-    out = out[required].copy()
+    out = df.rename(columns=rename_map)[required].copy()
 
     out["item"] = out["item"].astype(str).str.strip()
     out["category"] = out["category"].astype(str).str.strip()
     out["price"] = pd.to_numeric(out["price"], errors="coerce")
 
     out = out.dropna(subset=["item", "category", "price"])
-    out = out[out["item"] != ""]
-    out = out[out["category"] != ""]
-
+    out = out[(out["item"] != "") & (out["category"] != "")]
     out = out.rename(columns={"__sheet__": "eqp_type"})
     out = out.reset_index(drop=True)
 
     return out
 
-def make_cart_key(item_name, category, price, eqp_type):
-    return (item_name, category, float(price), eqp_type)
+
+@st.cache_data(show_spinner=False)
+def load_logo(path):
+    p = Path(path)
+    if not p.exists():
+        return None
+
+    with open(p, "rb") as f:
+        return base64.b64encode(f.read()).decode()
 
 
-if "cart_lookup" not in st.session_state:
-    st.session_state.cart_lookup = {}
+@st.cache_data(show_spinner=False)
+def build_export_excel(cart_records, total, total_w_dph):
+    columns = [
+        "Položka",
+        "Kategória",
+        "Typ vybavenia",
+        "Cena bez DPH (€)",
+        "Množstvo",
+        "Celkom",
+    ]
+
+    cdf = pd.DataFrame(cart_records)
+
+    if cdf.empty:
+        export_df = pd.DataFrame(columns=columns)
+    else:
+        cdf = cdf.copy()
+        cdf["line_total"] = cdf["price"] * cdf["qty"]
+        cdf["line_total"] = cdf["line_total"].round(2)
+        cdf["price"] = cdf["price"].round(2)
+
+        export_df = cdf.rename(columns={
+            "item": "Položka",
+            "category": "Kategória",
+            "eqp_type": "Typ vybavenia",
+            "price": "Cena bez DPH (€)",
+            "qty": "Množstvo",
+            "line_total": "Celkom",
+        })
+
+        export_df = export_df[columns]
+
+    total_rows = pd.DataFrame([
+        {
+            "Položka": "",
+            "Kategória": "",
+            "Typ vybavenia": "",
+            "Cena bez DPH (€)": "",
+            "Množstvo": "Celkom bez DPH",
+            "Celkom": round(total, 2),
+        },
+        {
+            "Položka": "",
+            "Kategória": "",
+            "Typ vybavenia": "",
+            "Cena bez DPH (€)": "",
+            "Množstvo": "Celkom s DPH",
+            "Celkom": round(total_w_dph, 2),
+        },
+    ])
+
+    export_df = pd.concat([export_df, total_rows], ignore_index=True)
+    return to_excel_bytes(export_df)
 
 
 def add_to_cart(item, category, eqp_type, price, qty=1):
-    if "cart" not in st.session_state:
-        st.session_state.cart = []
-    if "next_cart_id" not in st.session_state:
-        st.session_state.next_cart_id = 1
+    item = str(item)
+    category = str(category)
+    eqp_type = str(eqp_type)
+    price = float(price)
+    qty = int(qty)
 
     for cart_item in st.session_state.cart:
         if (
             cart_item["item"] == item
             and cart_item["category"] == category
             and cart_item["eqp_type"] == eqp_type
-            and float(cart_item["price"]) == float(price)
+            and float(cart_item["price"]) == price
         ):
-            cart_item["qty"] += int(qty)
+            cart_item["qty"] += qty
             st.session_state[f"cart_qty_{cart_item['cart_id']}"] = cart_item["qty"]
             return
 
+    cart_id = st.session_state.next_cart_id
+
     new_item = {
-        "cart_id": st.session_state.next_cart_id,
+        "cart_id": cart_id,
         "item": item,
         "category": category,
         "eqp_type": eqp_type,
-        "price": float(price),
-        "qty": int(qty),
+        "price": price,
+        "qty": qty,
     }
+
     st.session_state.cart.append(new_item)
     st.session_state.next_cart_id += 1
-    st.session_state[f"cart_qty_{new_item['cart_id']}"] = new_item["qty"]
+    st.session_state[f"cart_qty_{cart_id}"] = qty
 
 
 def get_cart_df():
     if not st.session_state.cart:
         return pd.DataFrame(columns=[
-            "cart_id", "item", "category", "eqp_type", "price", "qty", "line_total"
+            "cart_id",
+            "item",
+            "category",
+            "eqp_type",
+            "price",
+            "qty",
+            "line_total",
         ])
 
     df = pd.DataFrame(st.session_state.cart)
     df["line_total"] = df["price"] * df["qty"]
 
-    return df[["cart_id", "item", "category", "eqp_type", "price", "qty", "line_total"]]
+    return df[[
+        "cart_id",
+        "item",
+        "category",
+        "eqp_type",
+        "price",
+        "qty",
+        "line_total",
+    ]]
+
+
+def clear_cart_qty_widget_state():
+    for key in list(st.session_state.keys()):
+        if str(key).startswith("cart_qty_"):
+            del st.session_state[key]
+
+
+def remove_from_cart(cart_id):
+    cart_id = int(cart_id)
+
+    for idx, cart_item in enumerate(st.session_state.cart):
+        if int(cart_item["cart_id"]) == cart_id:
+            st.session_state.cart.pop(idx)
+
+            qty_key = f"cart_qty_{cart_id}"
+            if qty_key in st.session_state:
+                del st.session_state[qty_key]
+
+            return
+
+
+def update_cart_qty(cart_id, new_qty):
+    cart_id = int(cart_id)
+    new_qty = int(new_qty)
+
+    for item in st.session_state.cart:
+        if int(item["cart_id"]) == cart_id:
+            if new_qty < 1:
+                remove_from_cart(cart_id)
+            else:
+                item["qty"] = new_qty
+                st.session_state[f"cart_qty_{cart_id}"] = new_qty
+            return
+
+
+def qty_changed(cart_id):
+    key = f"cart_qty_{cart_id}"
+    if key not in st.session_state:
+        return
+
+    update_cart_qty(cart_id, st.session_state[key])
 
 
 def reset_setup(keep_cart=False):
@@ -408,6 +406,8 @@ def reset_setup(keep_cart=False):
     st.session_state.category_col = None
     st.session_state.price_col = None
     st.session_state.desc_col = None
+    st.session_state.page = 1
+    st.session_state.last_filter_state = None
 
     if not keep_cart:
         st.session_state.cart = []
@@ -415,37 +415,12 @@ def reset_setup(keep_cart=False):
         clear_cart_qty_widget_state()
 
 
-def update_cart_qty(cart_id, new_qty):
-    new_qty = int(new_qty)
-
-    for item in st.session_state.get("cart", []):
-        if item["cart_id"] == cart_id:
-            if new_qty < 1:
-                remove_from_cart(cart_id)
-            else:
-                item["qty"] = new_qty
-                st.session_state[f"cart_qty_{cart_id}"] = new_qty
-            return
-
-def remove_from_cart(cart_id):
-    for idx, cart_item in enumerate(st.session_state.cart):
-        if cart_item["cart_id"] == cart_id:
-            st.session_state.cart.pop(idx)
-            qty_key = f"cart_qty_{cart_id}"
-            if qty_key in st.session_state:
-                del st.session_state[qty_key]
-            return
-        
-def clear_cart_qty_widget_state():
-    for key in list(st.session_state.keys()):
-        if str(key).startswith("cart_qty_"):
-            del st.session_state[key]
-
 def try_autoload_default_excel():
     file_bytes = download_excel_from_private_url()
     sheet_names = get_excel_sheets(file_bytes)
 
-    raw_df = load_selected_sheets(file_bytes, sheet_names)
+    raw_df = load_selected_sheets(file_bytes, tuple(sheet_names))
+
     if raw_df.empty:
         raise ValueError("V súkromnom Excel súbore sa nenašli žiadne dáta.")
 
@@ -474,6 +449,7 @@ def try_autoload_default_excel():
         )
 
     data = build_standard_table(raw_df, item_guess, category_guess, price_guess, desc_guess)
+
     if data.empty:
         raise ValueError("Po normalizácii sa nenašli žiadne platné riadky.")
 
@@ -506,11 +482,10 @@ if logo_base64:
     )
 else:
     st.title("PharmaGroup katalóg")
-    # st.caption("Nahraj Excel súbor, namapuj stĺpce a používaj filtre a košík.")
 
 
 # =========================================================
-# Setup section (auto-load + manuálne nastavenie)
+# Setup section
 # =========================================================
 if not st.session_state.setup_done and st.session_state.autoload_enabled:
     try:
@@ -518,6 +493,7 @@ if not st.session_state.setup_done and st.session_state.autoload_enabled:
         st.rerun()
     except Exception as e:
         st.warning(f"Automatické načítanie súkromného Excel súboru zlyhalo: {e}")
+
 
 if not st.session_state.setup_done:
     st.subheader("Nastavenie")
@@ -551,7 +527,7 @@ if not st.session_state.setup_done:
         st.stop()
 
     try:
-        raw_df = load_selected_sheets(file_bytes, selected_sheets)
+        raw_df = load_selected_sheets(file_bytes, tuple(selected_sheets))
     except Exception as e:
         st.error(f"Chyba pri načítaní hárkov: {e}")
         st.stop()
@@ -592,7 +568,6 @@ if not st.session_state.setup_done:
             "Stĺpec položky",
             options=available_cols,
             index=available_cols.index(item_guess) if item_guess in available_cols else 0,
-            help="Stĺpec s názvom položky / produktu / dielu."
         )
 
     with c2:
@@ -600,7 +575,6 @@ if not st.session_state.setup_done:
             "Stĺpec kategórie",
             options=available_cols,
             index=available_cols.index(category_guess) if category_guess in available_cols else 0,
-            help="Stĺpec s kategóriou / skupinou / typom."
         )
 
     with c3:
@@ -608,7 +582,6 @@ if not st.session_state.setup_done:
             "Stĺpec ceny",
             options=available_cols,
             index=available_cols.index(price_guess) if price_guess in available_cols else 0,
-            help="Stĺpec s číselnou cenou položky."
         )
 
     with c4:
@@ -616,7 +589,6 @@ if not st.session_state.setup_done:
             "Stĺpec popisu (voliteľné)",
             options=["(žiadny)"] + available_cols,
             index=(available_cols.index(desc_guess) + 1) if desc_guess in available_cols else 0,
-            help="Stĺpec s textovým popisom položky."
         )
 
     with st.expander("Náhľad nahraných dát"):
@@ -642,6 +614,8 @@ if not st.session_state.setup_done:
         st.session_state.price_col = price_col
         st.session_state.desc_col = desc_final
         st.session_state.setup_done = True
+        st.session_state.page = 1
+        st.session_state.last_filter_state = None
 
         st.rerun()
 
@@ -649,39 +623,19 @@ if not st.session_state.setup_done:
 
 
 # =========================================================
-# Compact mode (after setup)
+# Data check
 # =========================================================
 data = st.session_state.data
 
 if data is None or data.empty:
     st.error("Dáta nie sú dostupné. Resetuj a nahraj súbor znova.")
-#     if st.button("Resetovať"):
-#         reset_setup(keep_cart=False)
-#         st.rerun()
-#     st.stop()
+    st.stop()
 
 
-# # Top compact controls
-# top_left, top_mid, top_right = st.columns([3, 2, 1])
-
-# with top_left:
-#     st.success("Excel načítaný")
-
-# with top_mid:
-#     file_info = f"Hárky: {', '.join(st.session_state.selected_sheets)}"
-#     st.caption(file_info)
-
-# with top_right:
-#     if st.button("Zmeniť súbor / mapovanie"):
-#         reset_setup(keep_cart=False)
-#         st.session_state.autoload_enabled = False
-#         st.rerun()
-
-
+# =================================
+# Filters
 # =========================================================
-# Compact dropdown filters
-# =========================================================
-filter1, filter2, filter3 = st.columns([2, 2, 3])
+filter1, filter2, filter3, filter4 = st.columns([2, 2, 3, 1.4])
 
 filtered = data
 
@@ -702,20 +656,63 @@ if selected_category != "Všetko":
 with filter3:
     search_text = st.text_input("Hľadať položku")
 
-if search_text:
-    filtered = filtered[filtered["item"].str.contains(search_text, case=False, na=False)]
+with filter4:
+    page_size = st.selectbox(
+        "Na stránku",
+        options=[25, 50, 100],
+        index=[25, 50, 100].index(DEFAULT_PAGE_SIZE)
+    )
 
-filtered = filtered.sort_values(["category", "item"]).reset_index(drop=True)
+if search_text:
+    filtered = filtered[
+        filtered["item"].str.contains(search_text, case=False, na=False)
+    ]
+
+filtered = filtered.sort_values(["category", "item"], kind="stable").reset_index(drop=True)
+
+
+# =========================================================
+# Reset pagination when filters change
+# =========================================================
+current_filter_state = (
+    selected_eqp,
+    selected_category,
+    search_text,
+    page_size,
+)
+
+if st.session_state.last_filter_state is None:
+    st.session_state.last_filter_state = current_filter_state
+
+if current_filter_state != st.session_state.last_filter_state:
+    st.session_state.page = 1
+    st.session_state.last_filter_state = current_filter_state
+
+
+# =========================================================
+# Pagination calculation
+# =========================================================
+total_items = len(filtered)
+total_pages = max(1, (total_items + page_size - 1) // page_size)
+
+if st.session_state.page > total_pages:
+    st.session_state.page = total_pages
+
+start_idx = (st.session_state.page - 1) * page_size
+end_idx = start_idx + page_size
+
+filtered_view = filtered.iloc[start_idx:end_idx]
 
 
 # =========================================================
 # Main layout
 # =========================================================
-left_col, right_col = st.columns([2.4, 1.6], gap = "large")
+left_col, right_col = st.columns([2.4, 1.6], gap="large")
 
-# ---------------------------------------------------------
+
+# =========================================================
 # Available items
-# ---------------------------------------------------------
+# =========================================================
 with left_col:
     st.markdown('<div class="items-panel">', unsafe_allow_html=True)
     st.markdown("## Dostupné položky")
@@ -723,7 +720,47 @@ with left_col:
     if filtered.empty:
         st.warning("Žiadne položky nevyhovujú aktuálnym filtrom.")
     else:
+        st.caption(
+            f"Nájdených položiek: {total_items} | "
+            f"Zobrazené: {start_idx + 1}–{min(end_idx, total_items)}"
+        )
+
+        p1, p2, p3 = st.columns([1, 2, 1])
+
+        with p1:
+            if st.button(
+                "⬅ Predchádzajúca",
+                disabled=st.session_state.page <= 1,
+                use_container_width=True,
+                key="prev_page_top"
+            ):
+                st.session_state.page -= 1
+                st.rerun()
+
+        with p2:
+            st.markdown(
+                f"""
+                <div class="pagination-info">
+                    Strana {st.session_state.page} z {total_pages}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        with p3:
+            if st.button(
+                "Ďalšia ➡",
+                disabled=st.session_state.page >= total_pages,
+                use_container_width=True,
+                key="next_page_top"
+            ):
+                st.session_state.page += 1
+                st.rerun()
+
+        st.divider()
+
         h1, h2, h3, h4, h5 = st.columns([4, 2, 2, 1.3, 1.2])
+
         with h1:
             st.markdown("**Položka**")
         with h2:
@@ -735,7 +772,7 @@ with left_col:
 
         st.divider()
 
-        for row in filtered.itertuples(index=True):
+        for row in filtered_view.itertuples(index=True):
             c1, c2, c3, c4, c5 = st.columns([4, 2, 2, 1.3, 1.2])
 
             with c1:
@@ -751,7 +788,11 @@ with left_col:
                 st.write(f"{row.price:.2f}")
 
             with c5:
-                if st.button("Pridať", key=f"add_{row.Index}", use_container_width=True):
+                if st.button(
+                    "Pridať",
+                    key=f"add_{row.Index}",
+                    use_container_width=True
+                ):
                     add_to_cart(
                         item=row.item,
                         category=row.category,
@@ -775,20 +816,50 @@ with left_col:
 
             st.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
 
+        if total_pages > 1:
+            st.divider()
+
+            bp1, bp2, bp3 = st.columns([1, 2, 1])
+
+            with bp1:
+                if st.button(
+                    "⬅ Predchádzajúca",
+                    disabled=st.session_state.page <= 1,
+                    use_container_width=True,
+                    key="prev_page_bottom"
+                ):
+                    st.session_state.page -= 1
+                    st.rerun()
+
+            with bp2:
+                st.markdown(
+                    f"""
+                    <div class="pagination-info">
+                        Strana {st.session_state.page} z {total_pages}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            with bp3:
+                if st.button(
+                    "Ďalšia ➡",
+                    disabled=st.session_state.page >= total_pages,
+                    use_container_width=True,
+                    key="next_page_bottom"
+                ):
+                    st.session_state.page += 1
+                    st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ---------------------------------------------------------
-# Cart (sticky in right column)
-# ---------------------------------------------------------
-
-def qty_changed(cart_id):
-    key = f"cart_qty_{cart_id}"
-    if key not in st.session_state:
-        return
-    new_qty = st.session_state[key]
-    update_cart_qty(cart_id, new_qty)
-
+# =========================================================
+# Cart
+# =========================================================
 with right_col:
+    st.markdown('<div class="sticky-cart-container">', unsafe_allow_html=True)
+
     with st.container(border=True):
         st.markdown("""
         <div class="cart-header">
@@ -803,6 +874,7 @@ with right_col:
             st.info("Zoznam položiek je prázdny.")
         else:
             h1, h2, h3, h4, h5, h6 = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
+
             with h1:
                 st.markdown("**Položka**")
             with h2:
@@ -818,33 +890,33 @@ with right_col:
 
             st.divider()
 
+            for row in cdf.itertuples(index=False):
+                cart_id = int(row.cart_id)
 
-
-            for _, row in cdf.iterrows():
                 a, b, c, d, e, f = st.columns([2.4, 1.2, 1.3, 1.0, 1.3, 1.2])
-                cart_id = int(row["cart_id"])
 
                 with a:
                     st.markdown(
                         f"""
                         <div style="line-height:1.1;">
-                            <div style="font-weight:600;">{row['item']}</div>
-                            <div style="font-size:12px; color:gray;">{row['category']}</div>
+                            <div style="font-weight:600;">{row.item}</div>
+                            <div style="font-size:12px; color:gray;">{row.category}</div>
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
 
                 with b:
-                    st.write(row["eqp_type"])
+                    st.write(row.eqp_type)
 
                 with c:
-                    st.write(f"{row['price']:.2f} €")
+                    st.write(f"{row.price:.2f} €")
 
                 with d:
                     qty_key = f"cart_qty_{cart_id}"
+
                     if qty_key not in st.session_state:
-                        st.session_state[qty_key] = int(row["qty"])
+                        st.session_state[qty_key] = int(row.qty)
 
                     st.number_input(
                         "Množstvo",
@@ -861,7 +933,7 @@ with right_col:
                     st.markdown(
                         f"""
                         <div style="text-align:right; font-weight:600; padding-top:6px;">
-                            {row['line_total']:.2f} €
+                            {row.line_total:.2f} €
                         </div>
                         <div style="text-align:right; font-size:11px; color:gray;">
                             spolu
@@ -871,23 +943,27 @@ with right_col:
                     )
 
                 with f:
-                    if st.button("Odstrániť", key=f"remove_{cart_id}", use_container_width=True):
+                    if st.button(
+                        "Odstrániť",
+                        key=f"remove_{cart_id}",
+                        use_container_width=True
+                    ):
                         remove_from_cart(cart_id)
                         st.toast("Položka odstránená")
                         st.rerun()
 
                 st.divider()
 
-            # po prípadných zmenách v košíku prepočítaj cdf
             cdf = get_cart_df()
-
-            total = cdf["line_total"].sum()
-            total_w_dph = total * 1.23
+            total = float(cdf["line_total"].sum())
+            total_w_dph = total * VAT_RATE
 
             with st.container(border=True):
                 r1c1, r1c2 = st.columns([2.2, 1])
+
                 with r1c1:
                     st.markdown("Celkom bez DPH")
+
                 with r1c2:
                     st.markdown(
                         f"<div style='text-align:right; font-weight:600;'>{total:.2f} €</div>",
@@ -897,18 +973,25 @@ with right_col:
                 st.divider()
 
                 r2c1, r2c2 = st.columns([2.2, 1])
+
                 with r2c1:
                     st.markdown(
                         "<div style='font-size:18px; font-weight:700;'>Celkom s DPH</div>",
                         unsafe_allow_html=True
                     )
+
                 with r2c2:
                     st.markdown(
-                        f"<div style='text-align:right; font-size:26px; font-weight:800; color:#0f766e; white-space:nowrap;'>{total_w_dph:.2f} €</div>",
+                        f"""
+                        <div style='text-align:right; font-size:26px; font-weight:800; color:#0f766e; white-space:nowrap;'>
+                            {total_w_dph:.2f} €
+                        </div>
+                        """,
                         unsafe_allow_html=True
                     )
 
             btn1, btn2 = st.columns(2)
+
             with btn1:
                 if st.button("Vymazať zoznam", use_container_width=True):
                     st.session_state.cart = []
@@ -916,42 +999,13 @@ with right_col:
                     clear_cart_qty_widget_state()
                     st.toast("Zoznam vymazaný")
                     st.rerun()
-                    
+
             with btn2:
-                # Export do Excelu – s riadkami CELKOM
-                export_df = cdf.copy()
-                export_df = export_df.rename(columns={
-                    "item": "Položka",
-                    "category": "Kategória",
-                    "eqp_type": "Typ vybavenia",
-                    "price": "Cena bez DPH (€)",
-                    "qty": "Množstvo",
-                    "line_total": "Celkom bez DPH (€)"
-                })
-
-                total_rows = pd.DataFrame([
-                    {
-                        "Položka": "",
-                        "Kategória": "",
-                        "Typ vybavenia": "",
-                        "Cena bez DPH (€)": "",
-                        "Množstvo": "Celkom bez DPH",
-                        "Celkom": round(total, 2)
-                    },
-                    {
-                        "Položka": "",
-                        "Kategória": "",
-                        "Typ vybavenia": "",
-                        "Cena bez DPH (€)": "",
-                        "Množstvo": "Celkom s DPH",
-                        "Celkom": round(total_w_dph, 2)
-                    }
-                ])
-
-                export_df = pd.concat([export_df, total_rows], ignore_index=True)
-                export_df = export_df[["Položka", "Kategória", "Typ vybavenia", "Cena bez DPH (€)", "Množstvo", "Celkom"]]
-                excel_data = build_export_excel(st.session_state.cart, total, total_w_dph)
-
+                excel_data = build_export_excel(
+                    st.session_state.cart,
+                    total,
+                    total_w_dph
+                )
 
                 st.download_button(
                     label="Stiahnuť Excel",
@@ -961,9 +1015,7 @@ with right_col:
                     use_container_width=True
                 )
 
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # =========================================================
