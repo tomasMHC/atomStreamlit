@@ -474,7 +474,7 @@ if logo_base64:
         <div style="display:flex;align-items:center;gap:15px;">
             <img src="data:image/png;base64,{logo_base64}" width="100">
             <div>
-                <h1 style="margin-bottom:0;">PharmaGroup katalóg</h1>
+                <h1 style="margin-bottom:0;">PharmaGroup katalóg USG</h1>
             </div>
         </div>
         """,
